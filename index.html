@@ -624,11 +624,17 @@ function assembleRawSystem(){
         if(Q!==0){ F[a]+=Q*Le/6; F[m]+=Q*Le*4/6; F[b]+=Q*Le/6; }
       }
     }
-    // Point flux BCs at the two ends (positive = flux entering the domain)
+    // Point flux/convective BCs at the two ends (positive flux = entering the domain)
     for(const edgeName of Object.keys(boundaries)){
       const bc = state.bc[edgeName];
-      if(!bc || bc.type !== 'flux' || bc.value===0) continue;
-      F[boundaries[edgeName][0]] += bc.value;
+      if(!bc) continue;
+      const node = boundaries[edgeName][0];
+      if(bc.type === 'flux' && bc.value !== 0){
+        F[node] += bc.value;
+      } else if(bc.type === 'convective'){
+        Kadd(node, node, bc.h);
+        F[node] += bc.h * bc.Tinf;
+      }
     }
   } else if(!isQuadratic){
     for(const [a,b,c] of elements){
@@ -660,11 +666,12 @@ function assembleRawSystem(){
     }
   }
 
-  // Neumann (flux) boundary contributions — 2D edges only (1D handled above as point loads)
+  // Neumann (flux) and Robin/convective boundary contributions — 2D edges only (1D handled above as point terms)
   if(!is1D){
     for(const edgeName of Object.keys(boundaries)){
       const bc = state.bc[edgeName];
-      if(!bc || bc.type !== 'flux' || bc.value===0) continue;
+      if(!bc || (bc.type !== 'flux' && bc.type !== 'convective')) continue;
+      if(bc.type==='flux' && bc.value===0) continue;
       const list = boundaries[edgeName];
       const step = isQuadratic ? 2 : 1;
       for(let s=0;s+step<list.length;s+=step){
@@ -672,28 +679,51 @@ function assembleRawSystem(){
           const p=list[s], m=list[s+1], q=list[s+2];
           const dx=nodes[q].x-nodes[p].x, dy=nodes[q].y-nodes[p].y;
           const len = Math.sqrt(dx*dx+dy*dy);
-          F[p] += bc.value*len/6;
-          F[m] += bc.value*len*4/6;
-          F[q] += bc.value*len/6;
+          if(bc.type==='flux'){
+            F[p] += bc.value*len/6;
+            F[m] += bc.value*len*4/6;
+            F[q] += bc.value*len/6;
+          } else {
+            // Robin term: contributes to K (h*Ni*Nj integrated along the edge) and to F (h*Tinf*Ni)
+            const sK = bc.h*len/30;
+            const KL = [[4*sK,2*sK,-1*sK],[2*sK,16*sK,2*sK],[-1*sK,2*sK,4*sK]];
+            const ids=[p,m,q];
+            for(let i=0;i<3;i++) for(let j=0;j<3;j++) Kadd(ids[i],ids[j],KL[i][j]);
+            F[p] += bc.h*bc.Tinf*len/6;
+            F[m] += bc.h*bc.Tinf*len*4/6;
+            F[q] += bc.h*bc.Tinf*len/6;
+          }
         } else {
           const p=list[s], q=list[s+1];
           const dx=nodes[q].x-nodes[p].x, dy=nodes[q].y-nodes[p].y;
           const len = Math.sqrt(dx*dx+dy*dy);
-          const contrib = bc.value*len/2;
-          F[p]+=contrib; F[q]+=contrib;
+          if(bc.type==='flux'){
+            const contrib = bc.value*len/2;
+            F[p]+=contrib; F[q]+=contrib;
+          } else {
+            const sK = bc.h*len/6;
+            Kadd(p,p,2*sK); Kadd(p,q,1*sK); Kadd(q,p,1*sK); Kadd(q,q,2*sK);
+            F[p] += bc.h*bc.Tinf*len/2;
+            F[q] += bc.h*bc.Tinf*len/2;
+          }
         }
       }
     }
   }
 
   const fixed = new Map();
+  let hasConvective = false;
   for(const edgeName of Object.keys(boundaries)){
     const bc = state.bc[edgeName];
-    if(!bc || bc.type !== 'fixed') continue;
-    for(const nd of boundaries[edgeName]) fixed.set(nd, bc.value);
+    if(!bc) continue;
+    if(bc.type === 'fixed'){
+      for(const nd of boundaries[edgeName]) fixed.set(nd, bc.value);
+    } else if(bc.type === 'convective'){
+      hasConvective = true;
+    }
   }
-  if(fixed.size === 0){
-    throw new Error('ต้องกำหนดอุณหภูมิคงที่ (Fixed Temperature) อย่างน้อย 1 จุด/ขอบ เพื่อให้ระบบสมการแก้ได้');
+  if(fixed.size === 0 && !hasConvective){
+    throw new Error('ต้องกำหนดอุณหภูมิคงที่ (Fixed Temperature) หรือเงื่อนไขการพาความร้อน (Convective) อย่างน้อย 1 จุด/ขอบ เพื่อให้ระบบสมการแก้ได้');
   }
 
   return {K, F, n, fixed};
@@ -872,23 +902,33 @@ function solveLinearSystem(K,F,n,method){
 /* ---- Exact solution engine ---- */
 function isZeroFlux(bc){ return !bc || bc.type==='insulated' || (bc.type==='flux' && bc.value===0); }
 
-function exactSolution1D(L, k, Q, bcLo, bcHi){
-  const leftFixed = bcLo.type==='fixed', rightFixed = bcHi.type==='fixed';
-  const qLo = bcLo.type==='flux' ? bcLo.value : 0;
-  const qHi = bcHi.type==='flux' ? bcHi.value : 0;
-  let C1, C2;
-  if(leftFixed && rightFixed){
-    C2 = bcLo.value;
-    C1 = (bcHi.value - bcLo.value + (Q/(2*k))*L*L)/L;
-  } else if(leftFixed && !rightFixed){
-    C2 = bcLo.value;
-    C1 = qHi/k + (Q/k)*L;
-  } else if(!leftFixed && rightFixed){
-    C1 = -qLo/k;
-    C2 = bcHi.value + (Q/(2*k))*L*L - C1*L;
-  } else {
-    return null;
+/* General 1D closed-form solver for T(x) = -(Q/2k)x^2 + C1*x + C2 with any mix of
+   Fixed / Flux(or insulated) / Convective conditions at the two ends x=0 and x=L.
+   Each end contributes one linear equation "a*C1 + b*C2 = c"; solving the 2x2 system
+   handles every combination uniformly (including Robin/convective) without special-casing. */
+function bcLinearEquation(end, bc, k, Q, L){
+  if(bc.type==='fixed'){
+    if(end==='left') return [0, 1, bc.value];
+    return [L, 1, bc.value + (Q/(2*k))*L*L];
   }
+  if(bc.type==='convective'){
+    const h=bc.h, Tinf=bc.Tinf;
+    if(end==='left') return [k, -h, -h*Tinf];
+    return [k + h*L, h, Q*L + h*Q*L*L/(2*k) + h*Tinf];
+  }
+  // flux or insulated (insulated == flux with value 0)
+  const q = bc.type==='flux' ? bc.value : 0;
+  if(end==='left') return [1, 0, -q/k];
+  return [1, 0, q/k + (Q/k)*L];
+}
+
+function exactSolution1D(L, k, Q, bcLo, bcHi){
+  const [a1,b1,c1] = bcLinearEquation('left', bcLo, k, Q, L);
+  const [a2,b2,c2] = bcLinearEquation('right', bcHi, k, Q, L);
+  const det = a1*b2 - a2*b1;
+  if(Math.abs(det) < 1e-10) return null; // ill-posed (e.g. both ends flux/insulated with no absolute reference)
+  const C1 = (c1*b2 - c2*b1)/det;
+  const C2 = (a1*c2 - a2*c1)/det;
   return (x)=> -(Q/(2*k))*x*x + C1*x + C2;
 }
 
@@ -1381,7 +1421,7 @@ function renderNav(){
   STEPS.forEach((s, i)=>{
     const div = document.createElement('div');
     const locked = i > maxReachableStep();
-    div.className = 'step-item' + (i===state.step?' active':'') + (i<maxReachableStep()?' done':'') + (locked?' locked':'');
+    div.className = 'step-item' + (i===state.step?' active':'') + (i<state.step?' done':'') + (locked?' locked':'');
     div.innerHTML = `<span class="n">${i+1}</span><span>${s.label}</span>`;
     if(!locked){
       div.addEventListener('click', ()=>{ state.step=i; renderAll(); });
@@ -1758,20 +1798,39 @@ function refreshPreviewIfPresent(){
 /* --- Step 3: Material --- */
 function renderMaterialStep(main){
   makeTitle(main, 'คุณสมบัติของวัสดุ', 'กำหนดค่าที่จำเป็นสำหรับสมการการนำความร้อน (หนา 1 หน่วยตั้งฉากกับระนาบ 2D)');
+
   const row = document.createElement('div'); row.className='field-row';
   row.appendChild(numField('สัมประสิทธิ์การนำความร้อน k', state.material.k, 'W/(m·K)', v=>{state.material.k=v;}));
+  if(state.analysisType==='transient'){
+    row.appendChild(numField('ความหนาแน่น ρ', state.material.rho, 'kg/m³', v=>{state.material.rho=v;}));
+    row.appendChild(numField('ความจุความร้อนจำเพาะ cp', state.material.cp, 'J/(kg·K)', v=>{state.material.cp=v;}));
+  }
+  main.appendChild(row);
+
+  const row2 = document.createElement('div'); row2.className='field-row';
   const f2 = document.createElement('div'); f2.className='field';
   f2.innerHTML = `<label>แหล่งกำเนิดความร้อนภายใน Q (ไม่บังคับ)</label>`;
   const i2 = document.createElement('input'); i2.type='number'; i2.step='any'; i2.value=state.material.Q;
   i2.addEventListener('input', ()=>{ const v=parseFloat(i2.value); state.material.Q = isNaN(v)?0:v; });
   const u2 = document.createElement('span'); u2.className='unit'; u2.textContent='W/m³';
   f2.appendChild(i2); f2.appendChild(u2);
-  row.appendChild(f2);
-  if(state.analysisType==='transient'){
-    row.appendChild(numField('ความหนาแน่น ρ', state.material.rho, 'kg/m³', v=>{state.material.rho=v;}));
-    row.appendChild(numField('ความจุความร้อนจำเพาะ cp', state.material.cp, 'J/(kg·K)', v=>{state.material.cp=v;}));
+  row2.appendChild(f2);
+  main.appendChild(row2);
+
+  const setBtn = document.createElement('button'); setBtn.className='secondary'; setBtn.textContent='Set';
+  setBtn.style.marginBottom='6px';
+  const applied = document.createElement('div'); applied.className='eq-applied'; applied.style.display='block'; applied.style.marginBottom='16px';
+  function refreshApplied(){
+    let txt = `ยืนยันแล้ว: k = ${state.material.k} W/(m·K), Q = ${state.material.Q} W/m³`;
+    if(state.analysisType==='transient'){
+      txt += `, ρ = ${state.material.rho} kg/m³, cp = ${state.material.cp} J/(kg·K)`;
+    }
+    applied.textContent = txt;
   }
-  main.appendChild(row);
+  setBtn.onclick = refreshApplied;
+  refreshApplied();
+  main.appendChild(setBtn);
+  main.appendChild(applied);
 
   eqBlock(main, "Fourier's law (ความสัมพันธ์ของฟลักซ์ความร้อนกับ k)",
     `q ${rm('=')} ${rm('-')}k∇T`,
@@ -2082,6 +2141,7 @@ function renderBcStep(main){
   const rowsEq = [
     ['Fixed temperature (Dirichlet)', `T ${rm('=')} ${bar('T')} ${rm('on Γ')}<sub>D</sub>`],
     ['Heat flux (Neumann)', `${rm('-')}k${frac('∂T','∂n')} ${rm('=')} ${bar('q')} ${rm('on Γ')}<sub>N</sub>`],
+    ['Convective (Robin)', `${rm('-')}k${frac('∂T','∂n')} ${rm('=')} h${rm('(')}T ${rm('-')} T<sub>∞</sub>${rm(') on Γ')}<sub>conv</sub>`],
     ['Insulated', `${frac('∂T','∂n')} ${rm('=')} 0 ${rm('on Γ')}<sub>ins</sub>`],
   ];
   rowsEq.forEach(([label, html])=>{
@@ -2092,7 +2152,7 @@ function renderBcStep(main){
     eqList.appendChild(line);
   });
   const noteEq = document.createElement('div'); noteEq.className='eq-note';
-  noteEq.innerHTML = `<b>n</b> คือทิศทางตั้งฉากกับขอบ (normal direction), ${bar('T')} คืออุณหภูมิที่กำหนด, ${bar('q')} คือฟลักซ์ความร้อนที่กำหนด (ค่าบวก = ความร้อนไหลเข้าสู่โมเดล)`;
+  noteEq.innerHTML = `<b>n</b> คือทิศทางตั้งฉากกับขอบ (normal direction), ${bar('T')} คืออุณหภูมิที่กำหนด, ${bar('q')} คือฟลักซ์ความร้อนที่กำหนด (ค่าบวก = ความร้อนไหลเข้าสู่โมเดล), <b>h</b> คือสัมประสิทธิ์การพาความร้อน (convective heat transfer coefficient), <b>T∞</b> คืออุณหภูมิของของไหลโดยรอบ (ambient/fluid temperature)`;
   eqList.appendChild(noteEq);
   main.appendChild(eqList);
 
@@ -2110,16 +2170,48 @@ function renderBcStep(main){
 
     const tdType = document.createElement('td');
     const sel = document.createElement('select');
-    [['insulated','Insulated'],['fixed','Fixed temperature'],['flux','Heat flux']].forEach(([v,l])=>{
+    [['insulated','Insulated'],['fixed','Fixed temperature'],['flux','Heat flux'],['convective','Convective (h, T∞)']].forEach(([v,l])=>{
       const o = document.createElement('option'); o.value=v; o.textContent=l;
       if(state.bc[edgeName].type===v) o.selected=true;
       sel.appendChild(o);
     });
-    sel.addEventListener('change', ()=>{ state.bc[edgeName].type = sel.value; renderMain(); });
+    sel.addEventListener('change', ()=>{
+      state.bc[edgeName].type = sel.value;
+      if(sel.value==='convective'){
+        if(state.bc[edgeName].h===undefined) state.bc[edgeName].h = 10;
+        if(state.bc[edgeName].Tinf===undefined) state.bc[edgeName].Tinf = 25;
+      }
+      renderMain();
+    });
     tdType.appendChild(sel);
 
     const tdVal = document.createElement('td');
-    if(state.bc[edgeName].type !== 'insulated'){
+    if(state.bc[edgeName].type === 'insulated'){
+      tdVal.innerHTML = '<span class="unit">— ไม่มีการไหลของความร้อนผ่านขอบนี้ —</span>';
+    } else if(state.bc[edgeName].type === 'convective'){
+      const hInp = document.createElement('input'); hInp.type='number'; hInp.step='any';
+      hInp.value = state.bc[edgeName].h; hInp.placeholder='h';
+      hInp.style.width='70px';
+      hInp.addEventListener('input', ()=>{ const v=parseFloat(hInp.value); state.bc[edgeName].h = isNaN(v)?0:v; });
+      const tInp = document.createElement('input'); tInp.type='number'; tInp.step='any';
+      tInp.value = state.bc[edgeName].Tinf; tInp.placeholder='T∞';
+      tInp.style.width='70px'; tInp.style.marginLeft='6px';
+      tInp.addEventListener('input', ()=>{ const v=parseFloat(tInp.value); state.bc[edgeName].Tinf = isNaN(v)?0:v; });
+      const commit = ()=>{
+        state.bc[edgeName].h = isNaN(parseFloat(hInp.value)) ? 0 : parseFloat(hInp.value);
+        state.bc[edgeName].Tinf = isNaN(parseFloat(tInp.value)) ? 0 : parseFloat(tInp.value);
+        renderMain();
+      };
+      hInp.addEventListener('keydown', (e)=>{ if(e.key==='Enter') commit(); });
+      tInp.addEventListener('keydown', (e)=>{ if(e.key==='Enter') commit(); });
+      const setBtn = document.createElement('button'); setBtn.className='secondary'; setBtn.textContent='Set';
+      setBtn.style.padding='6px 12px'; setBtn.style.fontSize='11.5px'; setBtn.style.marginLeft='6px';
+      setBtn.onclick = commit;
+      tdVal.appendChild(hInp); tdVal.appendChild(tInp); tdVal.appendChild(setBtn);
+      const hint = document.createElement('div'); hint.className='unit'; hint.style.marginTop='4px';
+      hint.textContent = 'h: W/(m²·K)   T∞: °C';
+      tdVal.appendChild(hint);
+    } else {
       const inp = document.createElement('input'); inp.type='number'; inp.step='any';
       inp.value = state.bc[edgeName].value;
       inp.placeholder = state.bc[edgeName].type==='fixed' ? '°C' : 'W/m²';
@@ -2140,8 +2232,6 @@ function renderBcStep(main){
       const hint = document.createElement('span'); hint.className='unit'; hint.style.marginLeft='8px';
       hint.textContent = state.bc[edgeName].type==='fixed' ? '°C' : (state.dimension==='1d' ? 'W (A=1 m², เข้าสู่โมเดล = บวก)' : 'W/m² (เข้าสู่โมเดล = บวก)');
       tdVal.appendChild(hint);
-    } else {
-      tdVal.innerHTML = '<span class="unit">— ไม่มีการไหลของความร้อนผ่านขอบนี้ —</span>';
     }
 
     tr.appendChild(tdName); tr.appendChild(tdType); tr.appendChild(tdVal);
@@ -2160,6 +2250,7 @@ function renderBcStep(main){
     let text;
     if(bc.type==='fixed') text = `T = ${bc.value} °C   on ${labels[edgeName]}`;
     else if(bc.type==='flux') text = `-k·∂T/∂n = ${bc.value} ${fluxUnit}   on ${labels[edgeName]}`;
+    else if(bc.type==='convective') text = `-k·∂T/∂n = h(T-T∞), h=${bc.h} W/(m²·K), T∞=${bc.Tinf} °C   on ${labels[edgeName]}`;
     else text = `∂T/∂n = 0   on ${labels[edgeName]}  (insulated)`;
     const line = document.createElement('div'); line.className='eq-applied'; line.style.marginRight='8px';
     line.textContent = text;
@@ -2182,13 +2273,15 @@ function renderBcStep(main){
   }
 
   const hasFixed = Object.values(state.bc).some(b=>b.type==='fixed');
-  if(!hasFixed){
+  const hasConvective = Object.values(state.bc).some(b=>b.type==='convective');
+  const canProceed = hasFixed || hasConvective;
+  if(!canProceed){
     const note = document.createElement('div'); note.className='note';
-    note.textContent = 'ต้องกำหนด Fixed temperature อย่างน้อย 1 ขอบ ก่อนตีเมชและรันการจำลอง มิฉะนั้นระบบสมการจะไม่มีคำตอบที่แน่นอน';
+    note.textContent = 'ต้องกำหนด Fixed temperature หรือ Convective อย่างน้อย 1 ขอบ ก่อนตีเมชและรันการจำลอง มิฉะนั้นระบบสมการจะไม่มีคำตอบที่แน่นอน';
     main.appendChild(note);
   }
 
-  navButtons(main, { back:true, next:hasFixed, nextDisabled:!hasFixed, nextLabel:'ไปหน้าตีเมช →', onNext:()=>{ state.step=4; renderAll(); } });
+  navButtons(main, { back:true, next:canProceed, nextDisabled:!canProceed, nextLabel:'ไปหน้าตีเมช →', onNext:()=>{ state.step=4; renderAll(); } });
 }
 
 function highlightPreview(edgeName){
