@@ -5,22 +5,50 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FEMFEd — Finite Element Method For Education</title>
 <style>
+  @font-face{
+    font-family:'AppUI';
+    src: local('TH Sarabun New'), local('Sarabun'), local('Leelawadee UI');
+    unicode-range: U+0E00-0E7F, U+200B-200D;
+  }
+  @font-face{
+    font-family:'AppUI';
+    src: local('Times New Roman'), local('Times'), local('Liberation Serif');
+    unicode-range: U+0000-024F, U+2000-206F;
+  }
+  @font-face{
+    font-family:'AppMath';
+    src: local('TH Sarabun New'), local('Sarabun'), local('Leelawadee UI');
+    unicode-range: U+0E00-0E7F, U+200B-200D;
+  }
+  @font-face{
+    font-family:'AppMath';
+    src: local('Times New Roman'), local('Times'), local('Liberation Serif');
+    unicode-range: U+0000-024F, U+2000-206F;
+  }
   :root{
     --paper:#ffffff;
-    --ink:#1c2a3a;
-    --ink-soft:#66707d;
-    --blue:#1d4ed8;
-    --blue-deep:#0f2f7a;
-    --blue-tint:#eef2fd;
-    --amber:#b5730a;
+    --cloud:#F3F7F6;
+    --ink:#3A4145;
+    --ink-soft:#7C8588;
+    --mint:#3FAE8C;
+    --mint-deep:#227A5E;
+    --mint-tint:#E6F5F0;
+    --mint-border:#CFEAE1;
+    --peach:#D9A441;
+    --peach-deep:#7A5420;
+    --peach-tint:#FBF1DE;
     --panel:#ffffff;
-    --border: #e4e6ea;
-    --border-strong:#d4d7dd;
-    --danger:#a3311c;
-    --ok:#276e4d;
+    --border:#E6EAEA;
+    --border-strong:#D3DAD9;
+    --danger:#C0483A;
+    --danger-tint:#FBEAE7;
+    --ok:#227A5E;
+    --radius:10px;
+    --radius-sm:7px;
+    --shadow-sm:0 1px 2px rgba(40,50,48,0.05), 0 2px 8px rgba(40,50,48,0.05);
     --mono: ui-monospace, SFMono-Regular, "Consolas", "Liberation Mono", Menlo, monospace;
-    --serif-math: Cambria, "Times New Roman", Times, serif;
-    --sans: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --serif-math: 'AppMath', "Times New Roman", Times, serif;
+    --sans: 'AppUI', "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
@@ -34,18 +62,21 @@
     min-height:100vh;
   }
   header{
-    border-bottom:1px solid var(--border-strong);
-    padding:14px 22px;
+    padding:16px 24px;
     display:flex;
     align-items:baseline;
     justify-content:space-between;
     background:var(--paper);
+    box-shadow:0 1px 0 var(--border), 0 2px 6px rgba(40,50,48,0.04);
+    position:relative;
+    z-index:2;
   }
   header h1{
     font-size:17px;
     margin:0;
     letter-spacing:0.2px;
     font-weight:700;
+    color:var(--ink);
   }
   header .sub{
     font-family:var(--mono);
@@ -60,8 +91,8 @@
     min-height:0;
   }
   nav.steps{
-    border-right:1px solid var(--border-strong);
-    padding:18px 0;
+    background:var(--cloud);
+    padding:20px 0;
     display:flex;
     flex-direction:column;
   }
@@ -83,23 +114,26 @@
   }
   .step-item.active{
     color:var(--ink);
-    border-left-color:var(--blue);
-    background:rgba(29,78,216,0.06);
+    border-left-color:var(--mint);
+    background:var(--paper);
     font-weight:600;
+    box-shadow:var(--shadow-sm);
   }
-  .step-item.active .n{color:var(--blue);}
+  .step-item.active .n{color:var(--mint);}
   .step-item.done .n:after{content:" ✓"; color:var(--ok);}
   .step-item.locked{ opacity:0.42; cursor:not-allowed; }
 
   main{
-    padding:22px 26px;
+    padding:24px 28px;
     overflow:auto;
     min-width:0;
+    background:var(--paper);
   }
   .panel-title{
     font-size:15px;
     font-weight:700;
     margin:0 0 4px 0;
+    color:var(--ink);
   }
   .panel-desc{
     font-size:12.5px;
@@ -126,8 +160,9 @@
   .field input, .field select{
     font-family:var(--mono);
     font-size:13px;
-    padding:7px 9px;
+    padding:8px 10px;
     border:1px solid var(--border-strong);
+    border-radius:var(--radius-sm);
     background:var(--panel);
     color:var(--ink);
   }
@@ -135,7 +170,7 @@
   input[type=number]::-webkit-inner-spin-button,
   input[type=number]::-webkit-outer-spin-button{ -webkit-appearance:none; margin:0; }
   input[type=number]{ -moz-appearance:textfield; appearance:textfield; }
-  .field input:focus, .field select:focus{ outline:2px solid var(--blue); outline-offset:1px; }
+  .field input:focus, .field select:focus{ outline:2px solid var(--mint); outline-offset:1px; }
   .field .unit{ font-size:11px; color:var(--ink-soft); font-family:var(--mono); }
 
   .shape-choice{
@@ -145,6 +180,7 @@
   }
   .shape-btn{
     border:1px solid var(--border-strong);
+    border-radius:var(--radius);
     background:var(--panel);
     padding:10px 14px;
     cursor:pointer;
@@ -154,75 +190,83 @@
     gap:6px;
     width:110px;
     font-size:12px;
+    transition:box-shadow .15s ease, border-color .15s ease;
   }
-  .shape-btn.sel{ border-color:var(--blue); background:rgba(29,78,216,0.07); font-weight:600;}
+  .shape-btn.sel{ border-color:var(--mint); background:var(--mint-tint); font-weight:600; box-shadow:var(--shadow-sm);}
   .shape-btn svg{ width:34px; height:34px; }
 
   .eq-choice{ display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;}
   .eq-btn{
     border:1px solid var(--border-strong);
+    border-radius:var(--radius);
     background:var(--panel);
     padding:10px 14px;
     font-size:12.5px;
     cursor:pointer;
+    transition:box-shadow .15s ease, border-color .15s ease;
   }
-  .eq-btn.sel{ border-color:var(--blue); background:rgba(29,78,216,0.07); font-weight:600; color:var(--blue-deep);}
-  .eq-btn.disabled{ opacity:0.4; cursor:not-allowed; }
+  .eq-btn.sel{ border-color:var(--mint); background:var(--mint-tint); font-weight:600; color:var(--mint-deep); box-shadow:var(--shadow-sm);}
+  .eq-btn.disabled{ opacity:0.45; cursor:not-allowed; }
   .eq-btn .tag{ display:block; font-family:var(--mono); font-size:10px; color:var(--ink-soft); margin-top:2px;}
 
-  canvas{ background:var(--panel); border:1px solid var(--border-strong); display:block; }
+  canvas{ background:var(--panel); border:1px solid var(--border-strong); border-radius:var(--radius); display:block; }
   .canvas-wrap{ margin-top:6px; }
 
   .bc-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
   .bc-table th, .bc-table td{ text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); }
   .bc-table th{ color:var(--ink-soft); font-weight:600; font-size:11px; }
-  .bc-table select, .bc-table input{ font-family:var(--mono); font-size:12.5px; padding:5px 6px; border:1px solid var(--border-strong); width:100%; }
+  .bc-table select, .bc-table input{ font-family:var(--mono); font-size:12.5px; padding:6px 7px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); width:100%; }
 
   .actions{ margin-top:20px; display:flex; gap:10px; }
   button.primary{
-    background:var(--blue);
+    background:var(--mint);
     color:#fff;
     border:none;
+    border-radius:var(--radius-sm);
     padding:10px 18px;
     font-size:13px;
     font-weight:600;
     cursor:pointer;
+    box-shadow:var(--shadow-sm);
+    transition:background .15s ease;
   }
-  button.primary:hover{ background:var(--blue-deep); }
-  button.primary:disabled{ background:#9aa7bd; cursor:not-allowed; }
+  button.primary:hover{ background:var(--mint-deep); }
+  button.primary:disabled{ background:#B8C4C1; box-shadow:none; cursor:not-allowed; }
   button.secondary{
-    background:transparent;
+    background:var(--panel);
     border:1px solid var(--border-strong);
+    border-radius:var(--radius-sm);
     color:var(--ink);
     padding:10px 16px;
     font-size:13px;
     cursor:pointer;
+    transition:border-color .15s ease;
   }
-  button.secondary:hover{ border-color:var(--ink); }
+  button.secondary:hover{ border-color:var(--mint); }
 
   aside.info{
-    border-left:1px solid var(--border-strong);
+    background:var(--cloud);
     padding:20px 18px;
     font-size:12.5px;
   }
   aside.info h2{ font-size:12px; text-transform:none; margin:0 0 10px 0; color:var(--ink-soft); font-weight:700;}
   .stat-line{ display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px dashed var(--border); font-family:var(--mono); font-size:12px; }
   .stat-line span:first-child{ color:var(--ink-soft); font-family:var(--sans); }
-  .note{ margin-top:16px; padding:10px 12px; background:rgba(181,115,10,0.09); border-left:3px solid var(--amber); font-size:11.8px; color:#6b4708; }
-  .error{ margin-top:14px; padding:10px 12px; background:rgba(163,49,28,0.08); border-left:3px solid var(--danger); font-size:12px; color:var(--danger); display:none; }
+  .note{ margin-top:16px; padding:10px 12px; border-radius:var(--radius-sm); background:var(--peach-tint); border-left:3px solid var(--peach); font-size:11.8px; color:var(--peach-deep); }
+  .error{ margin-top:14px; padding:10px 12px; border-radius:var(--radius-sm); background:var(--danger-tint); border-left:3px solid var(--danger); font-size:12px; color:var(--danger); display:none; }
 
   .colorbar{ display:flex; flex-direction:row; align-items:flex-start; gap:10px; margin-top:14px; }
   .colorbar .ticks{ position:relative; font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); }
   .colorbar .ticks span{ position:absolute; left:0; white-space:nowrap; transform:translateY(-50%); }
 
   .legend-row{ display:flex; align-items:center; gap:8px; font-size:12px; margin-top:8px;}
-  .legend-swatch{ width:14px; height:14px; border:1px solid var(--border-strong); }
+  .legend-swatch{ width:14px; height:14px; border:1px solid var(--border-strong); border-radius:4px; }
 
   /* ---- Equations ---- */
   .eq-block{
-    background:var(--blue-tint);
-    border:1px solid #d8e2fb;
-    border-radius:2px;
+    background:var(--mint-tint);
+    border:1px solid var(--mint-border);
+    border-radius:var(--radius);
     padding:14px 18px;
     margin:10px 0 18px 0;
   }
@@ -235,7 +279,7 @@
     font-family:var(--serif-math);
     font-style:italic;
     font-size:16px;
-    color:var(--blue-deep);
+    color:var(--mint-deep);
     display:flex;
     align-items:center;
     flex-wrap:wrap;
@@ -243,6 +287,7 @@
     line-height:1.9;
   }
   .equation .rm{ font-style:normal; }
+  .equation .vec{ font-weight:700; font-style:italic; }
   .equation .sp{ display:inline-block; width:8px; }
   .frac{
     display:inline-flex;
@@ -253,7 +298,7 @@
     font-size:14px;
     line-height:1.15;
   }
-  .frac .num{ padding:0 3px 1px 3px; border-bottom:1.2px solid var(--blue-deep); }
+  .frac .num{ padding:0 3px 1px 3px; border-bottom:1.2px solid var(--mint-deep); }
   .frac .den{ padding:1px 3px 0 3px; }
   .eq-note{
     font-family:var(--sans);
@@ -270,6 +315,7 @@
     color:var(--ink);
     background:#fff;
     border:1px solid var(--border-strong);
+    border-radius:var(--radius-sm);
     padding:6px 10px;
     margin-top:6px;
     display:inline-block;
@@ -1180,6 +1226,7 @@ function fillContourGradient(canvas, mesh, T, min, max, tf){
 function frac(num, den){ return `<span class="frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
 function rm(text){ return `<span class="rm">${text}</span>`; }
 function bar(letter){ return `<span class="rm bar" style="text-decoration:overline;">${letter}</span>`; }
+function vec(letter){ return `<span class="vec">${letter}</span>`; }
 
 function eqBlock(main, caption, equationHtml, noteHtml){
   const box = document.createElement('div'); box.className='eq-block';
@@ -1238,16 +1285,16 @@ function drawMeshCanvas(canvas, mesh, showResults, overrideData){
       const [ax,ay]=tf(A.x,A.y), [bx,by]=tf(B.x,B.y), [cx,cy]=tf(C.x,C.y);
       ctx.beginPath();
       ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.lineTo(cx,cy); ctx.closePath();
-      ctx.fillStyle = '#eef1f6';
+      ctx.fillStyle = '#EEF3F1';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(29,42,58,0.35)';
+      ctx.strokeStyle = 'rgba(58,65,69,0.35)';
       ctx.lineWidth = 0.6;
       ctx.stroke();
     }
   }
 
   // boundary highlight (only in bc step, drawn separately) — outline shape
-  ctx.strokeStyle = '#1c2a3a';
+  ctx.strokeStyle = '#3A4145';
   ctx.lineWidth = 1.4;
   drawOutline(ctx, mesh, tf);
 }
@@ -1323,15 +1370,15 @@ function draw1DDomain(canvas, length, opts){
   const pad = 40;
   const y0 = H/2;
   const x0 = pad, x1 = W-pad;
-  ctx.strokeStyle = '#1c2a3a'; ctx.lineWidth = 2.5;
+  ctx.strokeStyle = '#3A4145'; ctx.lineWidth = 2.5;
   ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y0); ctx.stroke();
   // end caps
   ctx.beginPath(); ctx.moveTo(x0,y0-10); ctx.lineTo(x0,y0+10); ctx.moveTo(x1,y0-10); ctx.lineTo(x1,y0+10); ctx.stroke();
-  ctx.fillStyle = '#66707d'; ctx.font='11px sans-serif'; ctx.textAlign='center';
+  ctx.fillStyle = '#7C8588'; ctx.font='11px sans-serif'; ctx.textAlign='center';
   ctx.fillText('x = 0', x0, y0+26);
   ctx.fillText(`x = L = ${length} m`, x1, y0+26);
   if(opts.highlight){
-    ctx.strokeStyle = '#b5730a'; ctx.lineWidth=5;
+    ctx.strokeStyle = '#D9A441'; ctx.lineWidth=5;
     const hx = opts.highlight==='left' ? x0 : x1;
     ctx.beginPath(); ctx.moveTo(hx,y0-14); ctx.lineTo(hx,y0+14); ctx.stroke();
   }
@@ -1347,11 +1394,11 @@ function draw1DMesh(canvas, mesh){
     const corners = isQuad ? [el[0], el[2]] : [el[0], el[1]];
     corners.forEach(ci=>{
       const px = x0 + mesh.nodes[ci].x*scale;
-      ctx.beginPath(); ctx.arc(px,y0,5,0,Math.PI*2); ctx.fillStyle='#1d4ed8'; ctx.fill();
+      ctx.beginPath(); ctx.arc(px,y0,5,0,Math.PI*2); ctx.fillStyle='#3FAE8C'; ctx.fill();
     });
     if(isQuad){
       const px = x0 + mesh.nodes[el[1]].x*scale;
-      ctx.beginPath(); ctx.arc(px,y0,5,0,Math.PI*2); ctx.fillStyle='#b5730a'; ctx.fill();
+      ctx.beginPath(); ctx.arc(px,y0,5,0,Math.PI*2); ctx.fillStyle='#D9A441'; ctx.fill();
     }
   }
 }
@@ -1371,9 +1418,9 @@ function draw1DResultsChart(canvas, mesh, T, exactT){
   const tToPx = t => padT + plotH - ((t-tmin)/(tmax-tmin))*plotH;
 
   // axes
-  ctx.strokeStyle = '#d4d7dd'; ctx.lineWidth=1;
+  ctx.strokeStyle = '#D3DAD9'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(padL,padT); ctx.lineTo(padL,padT+plotH); ctx.lineTo(padL+plotW,padT+plotH); ctx.stroke();
-  ctx.fillStyle='#66707d'; ctx.font='11px sans-serif'; ctx.textAlign='right';
+  ctx.fillStyle='#7C8588'; ctx.font='11px sans-serif'; ctx.textAlign='right';
   ctx.fillText(tmax.toFixed(1), padL-6, tToPx(tmax)+4);
   ctx.fillText(tmin.toFixed(1), padL-6, tToPx(tmin)+4);
   ctx.textAlign='center';
@@ -1391,27 +1438,27 @@ function draw1DResultsChart(canvas, mesh, T, exactT){
 
   if(exactT){
     const exPts = mesh.nodes.map((nd,i)=>({x:nd.x, t:exactT[i]})).sort((a,b)=>a.x-b.x);
-    ctx.strokeStyle = '#b5730a'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+    ctx.strokeStyle = '#D9A441'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
     ctx.beginPath();
     exPts.forEach((p,i)=>{ const px=xToPx(p.x), py=tToPx(p.t); if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py); });
     ctx.stroke(); ctx.setLineDash([]);
   }
 
-  ctx.strokeStyle = '#1d4ed8'; ctx.lineWidth=2.5;
+  ctx.strokeStyle = '#3FAE8C'; ctx.lineWidth=2.5;
   ctx.beginPath();
   pts.forEach((p,i)=>{ const px=xToPx(p.x), py=tToPx(p.t); if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py); });
   ctx.stroke();
-  ctx.fillStyle='#1d4ed8';
+  ctx.fillStyle='#3FAE8C';
   pts.forEach(p=>{ ctx.beginPath(); ctx.arc(xToPx(p.x), tToPx(p.t), 3, 0, Math.PI*2); ctx.fill(); });
 
   // legend
   ctx.textAlign='left';
-  ctx.fillStyle='#1d4ed8'; ctx.fillRect(padL+plotW-150, padT+4, 14, 3);
-  ctx.fillStyle='#1c2a3a'; ctx.font='11px sans-serif'; ctx.fillText('Numerical (FEM)', padL+plotW-130, padT+9);
+  ctx.fillStyle='#3FAE8C'; ctx.fillRect(padL+plotW-150, padT+4, 14, 3);
+  ctx.fillStyle='#3A4145'; ctx.font='11px sans-serif'; ctx.fillText('Numerical (FEM)', padL+plotW-130, padT+9);
   if(exactT){
-    ctx.strokeStyle='#b5730a'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+    ctx.strokeStyle='#D9A441'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
     ctx.beginPath(); ctx.moveTo(padL+plotW-150, padT+22); ctx.lineTo(padL+plotW-136, padT+22); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle='#1c2a3a'; ctx.fillText('Exact solution', padL+plotW-130, padT+26);
+    ctx.fillStyle='#3A4145'; ctx.fillText('Exact solution', padL+plotW-130, padT+26);
   }
 }
 
@@ -1582,11 +1629,11 @@ function renderGeometryStep(main){
   const shapes = document.createElement('div'); shapes.className='shape-choice';
   const rectBtn = document.createElement('div');
   rectBtn.className='shape-btn'+(state.shape==='rectangle'?' sel':'');
-  rectBtn.innerHTML = `<svg viewBox="0 0 40 40"><rect x="5" y="10" width="30" height="20" fill="none" stroke="${state.shape==='rectangle'?'#1d4ed8':'#5b6b7d'}" stroke-width="2"/></svg><span>สี่เหลี่ยม</span>`;
+  rectBtn.innerHTML = `<svg viewBox="0 0 40 40"><rect x="5" y="10" width="30" height="20" fill="none" stroke="${state.shape==='rectangle'?'#3FAE8C':'#7C8588'}" stroke-width="2"/></svg><span>สี่เหลี่ยม</span>`;
   rectBtn.onclick = ()=>{ state.shape='rectangle'; state.mesh=null; state.results=null; renderAll(); };
   const polyBtn = document.createElement('div');
   polyBtn.className='shape-btn'+(state.shape==='polygon'?' sel':'');
-  polyBtn.innerHTML = `<svg viewBox="0 0 40 40"><polygon points="4,30 14,6 32,10 36,26 20,36" fill="none" stroke="${state.shape==='polygon'?'#1d4ed8':'#5b6b7d'}" stroke-width="2"/></svg><span>วาดรูปร่างเอง</span>`;
+  polyBtn.innerHTML = `<svg viewBox="0 0 40 40"><polygon points="4,30 14,6 32,10 36,26 20,36" fill="none" stroke="${state.shape==='polygon'?'#3FAE8C':'#7C8588'}" stroke-width="2"/></svg><span>วาดรูปร่างเอง</span>`;
   polyBtn.onclick = ()=>{ state.shape='polygon'; state.mesh=null; state.results=null; renderAll(); };
   shapes.appendChild(rectBtn); shapes.appendChild(polyBtn);
   main.appendChild(shapes);
@@ -1672,8 +1719,8 @@ function renderPolygonDrawTool(main){
     const summary = document.createElement('div'); summary.className='eq-block'; summary.style.background='#fff'; summary.style.borderColor='var(--border-strong)';
     summary.innerHTML = `<div class="eq-caption" style="margin-bottom:10px;">รูปร่างที่วาด</div>
       <div style="display:flex; gap:32px; font-family:var(--mono);">
-        <div><div class="unit">จำนวนจุด/ขอบ</div><div style="font-size:20px; font-weight:700; color:var(--blue-deep);">${state.polygon.vertices.length}</div></div>
-        <div><div class="unit">ขนาดกรอบ (bounding box)</div><div style="font-size:20px; font-weight:700; color:var(--blue-deep);">${bbox.w.toFixed(2)} × ${bbox.h.toFixed(2)} m</div></div>
+        <div><div class="unit">จำนวนจุด/ขอบ</div><div style="font-size:20px; font-weight:700; color:var(--mint-deep);">${state.polygon.vertices.length}</div></div>
+        <div><div class="unit">ขนาดกรอบ (bounding box)</div><div style="font-size:20px; font-weight:700; color:var(--mint-deep);">${bbox.w.toFixed(2)} × ${bbox.h.toFixed(2)} m</div></div>
       </div>`;
     main.appendChild(summary);
 
@@ -1694,7 +1741,7 @@ function renderPolygonDrawTool(main){
 function drawPolygonDraftCanvas(cv){
   const ctx = cv.getContext('2d');
   ctx.clearRect(0,0,cv.width,cv.height);
-  ctx.strokeStyle='rgba(29,42,58,0.08)'; ctx.lineWidth=1;
+  ctx.strokeStyle='rgba(58,65,69,0.08)'; ctx.lineWidth=1;
   const stepPx = DRAW_GRID_SPACING*DRAW_SCALE;
   for(let x=0;x<=cv.width;x+=stepPx){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,cv.height); ctx.stroke(); }
   for(let y=0;y<=cv.height;y+=stepPx){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(cv.width,y); ctx.stroke(); }
@@ -1702,20 +1749,20 @@ function drawPolygonDraftCanvas(cv){
   const verts = state.polygon.vertices;
   const toPx = (v)=> [v.x*DRAW_SCALE, cv.height - v.y*DRAW_SCALE];
   if(verts.length>0){
-    ctx.strokeStyle='#1d4ed8'; ctx.lineWidth=2;
+    ctx.strokeStyle='#3FAE8C'; ctx.lineWidth=2;
     ctx.beginPath();
     verts.forEach((v,i)=>{ const [x,y]=toPx(v); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
     ctx.stroke();
     if(verts.length>=3){
       const [x0,y0]=toPx(verts[0]), [xl,yl]=toPx(verts[verts.length-1]);
-      ctx.setLineDash([6,4]); ctx.strokeStyle='rgba(29,78,216,0.5)';
+      ctx.setLineDash([6,4]); ctx.strokeStyle='rgba(63,174,140,0.5)';
       ctx.beginPath(); ctx.moveTo(xl,yl); ctx.lineTo(x0,y0); ctx.stroke();
       ctx.setLineDash([]);
     }
     verts.forEach((v,i)=>{
       const [x,y]=toPx(v);
       ctx.beginPath(); ctx.arc(x,y, i===0?7:5, 0, Math.PI*2);
-      ctx.fillStyle = i===0 ? '#b5730a' : '#1d4ed8';
+      ctx.fillStyle = i===0 ? '#D9A441' : '#3FAE8C';
       ctx.fill();
     });
   }
@@ -1734,7 +1781,7 @@ function drawPreviewShape(cv, highlight){
   const ctx = cv.getContext('2d');
   ctx.clearRect(0,0,cv.width,cv.height);
   const bbox = bboxFor2DShape();
-  ctx.strokeStyle='#1d4ed8'; ctx.lineWidth=2; ctx.fillStyle='rgba(29,78,216,0.06)';
+  ctx.strokeStyle='#3FAE8C'; ctx.lineWidth=2; ctx.fillStyle='rgba(63,174,140,0.06)';
 
   if(state.shape==='rectangle'){
     const tf = fitTransform(bbox, cv.width, cv.height, 30);
@@ -1746,7 +1793,7 @@ function drawPreviewShape(cv, highlight){
       const edges = { bottom:[[0,0],[bbox.w,0]], right:[[bbox.w,0],[bbox.w,bbox.h]], top:[[bbox.w,bbox.h],[0,bbox.h]], left:[[0,bbox.h],[0,0]] };
       const seg = edges[highlight];
       if(seg){
-        ctx.strokeStyle='#b5730a'; ctx.lineWidth=5;
+        ctx.strokeStyle='#D9A441'; ctx.lineWidth=5;
         ctx.beginPath();
         seg.forEach((p,i)=>{ const [x,y]=tf(p[0],p[1]); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
         ctx.stroke();
@@ -1767,7 +1814,7 @@ function drawPreviewShape(cv, highlight){
     if(!isNaN(idx)){
       const a=verts[idx], b=verts[(idx+1)%verts.length];
       const [ax,ay]=tf(a.x,a.y), [bx,by]=tf(b.x,b.y);
-      ctx.strokeStyle='#b5730a'; ctx.lineWidth=5;
+      ctx.strokeStyle='#D9A441'; ctx.lineWidth=5;
       ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
     }
   }
@@ -1833,8 +1880,8 @@ function renderMaterialStep(main){
   main.appendChild(applied);
 
   eqBlock(main, "Fourier's law (ความสัมพันธ์ของฟลักซ์ความร้อนกับ k)",
-    `q ${rm('=')} ${rm('-')}k∇T`,
-    `<b>q</b> คือเวกเตอร์ฟลักซ์ความร้อน (W/m²) เครื่องหมายลบแสดงว่าความร้อนไหลจากบริเวณอุณหภูมิสูงไปยังบริเวณอุณหภูมิต่ำ ค่า <b>k</b> ที่กำหนดด้านบนจะถูกใช้ในสมการนี้และในสมการการนำความร้อนหลัก (governing equation) ที่แสดงไว้ในขั้นตอนก่อนหน้า`
+    `${vec('q')} ${rm('=')} ${rm('-')}k∇T`,
+    `<b>q</b> (ตัวหนา) คือเวกเตอร์ฟลักซ์ความร้อน (W/m²) เครื่องหมายลบแสดงว่าความร้อนไหลจากบริเวณอุณหภูมิสูงไปยังบริเวณอุณหภูมิต่ำ ค่า <b>k</b> ที่กำหนดด้านบนจะถูกใช้ในสมการนี้และในสมการการนำความร้อนหลัก (governing equation) ที่แสดงไว้ในขั้นตอนก่อนหน้า`
   );
 
   if(state.analysisType==='transient'){
@@ -1858,7 +1905,7 @@ function drawShapeFunctionDiagram(canvas, order){
   const panelH = 88;
   const panelATop = 34;
   const panelBTop = panelATop + panelH + 66;
-  const colors = ['#1d4ed8', '#b5730a', '#276e4d'];
+  const colors = ['#3FAE8C', '#D9A441', '#227A5E'];
   const isQuad = order==='quadratic';
   const nodesX = isQuad ? [0, 0.5, 1] : [0, 1];
 
@@ -1874,10 +1921,10 @@ function drawShapeFunctionDiagram(canvas, order){
   // ---- Panel A: the shape functions themselves ----
   const vMinA=-0.2, vMaxA=1.3;
   function yToPxA(v){ return panelATop + panelH*(vMaxA-v)/(vMaxA-vMinA); }
-  ctx.fillStyle='#1c2a3a'; ctx.font='bold 12px sans-serif'; ctx.textAlign='left';
+  ctx.fillStyle='#3A4145'; ctx.font='bold 12px sans-serif'; ctx.textAlign='left';
   ctx.fillText('1) รูปร่างของ Shape function Nᵢ(x)', padL, panelATop-16);
 
-  ctx.strokeStyle='#d4d7dd'; ctx.lineWidth=1;
+  ctx.strokeStyle='#D3DAD9'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(padL, yToPxA(0)); ctx.lineTo(padL+plotW, yToPxA(0)); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(padL, yToPxA(1)); ctx.lineTo(padL+plotW, yToPxA(1)); ctx.setLineDash([3,3]); ctx.stroke(); ctx.setLineDash([]);
 
@@ -1894,10 +1941,10 @@ function drawShapeFunctionDiagram(canvas, order){
   nodesX.forEach((nx,i)=>{
     ctx.fillStyle = colors[i]; ctx.font='bold 12px sans-serif'; ctx.textAlign=labelAlign(nx);
     ctx.fillText('N'+(i+1), xToPx(nx), yToPxA(1)-10);
-    ctx.strokeStyle='#5b6b7d'; ctx.lineWidth=1;
+    ctx.strokeStyle='#7C8588'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(xToPx(nx), yToPxA(0)-4); ctx.lineTo(xToPx(nx), yToPxA(0)+4); ctx.stroke();
   });
-  ctx.fillStyle='#66707d'; ctx.font='10px sans-serif'; ctx.textAlign='right';
+  ctx.fillStyle='#7C8588'; ctx.font='10px sans-serif'; ctx.textAlign='right';
   ctx.fillText('(= 1 ที่โหนดของตัวเอง, = 0 ที่โหนดอื่น)', padL+plotW, panelATop-16);
 
   // ---- Panel B: using them to interpolate real example nodal values ----
@@ -1910,10 +1957,10 @@ function drawShapeFunctionDiagram(canvas, order){
   const vMinB = Math.min(...sampledVals, ...exampleT)-10, vMaxB = Math.max(...sampledVals, ...exampleT)+16;
   function yToPxB(v){ return panelBTop + panelH*(vMaxB-v)/(vMaxB-vMinB); }
 
-  ctx.fillStyle='#1c2a3a'; ctx.font='bold 12px sans-serif'; ctx.textAlign='left';
+  ctx.fillStyle='#3A4145'; ctx.font='bold 12px sans-serif'; ctx.textAlign='left';
   ctx.fillText('2) ใช้ประมาณค่า T(x) จากค่าโหนดตัวอย่าง', padL, panelBTop-16);
 
-  ctx.strokeStyle='#1c2a3a'; ctx.lineWidth=2.6;
+  ctx.strokeStyle='#3A4145'; ctx.lineWidth=2.6;
   ctx.beginPath();
   for(let s=0;s<=60;s++){
     const x=s/60, v=interp(x);
@@ -1926,12 +1973,12 @@ function drawShapeFunctionDiagram(canvas, order){
     const px=xToPx(nx), py=yToPxB(exampleT[i]);
     ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2); ctx.fillStyle=colors[i]; ctx.fill();
     ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke();
-    ctx.fillStyle='#1c2a3a'; ctx.font='bold 11.5px sans-serif'; ctx.textAlign=labelAlign(nx);
+    ctx.fillStyle='#3A4145'; ctx.font='bold 11.5px sans-serif'; ctx.textAlign=labelAlign(nx);
     const dy = (isQuad && i===1) ? 16 : -12; // keep the middle node's label from colliding with the curve's peak
     ctx.fillText('T'+(i+1)+' = '+exampleT[i], px, py + dy);
   });
 
-  ctx.fillStyle='#66707d'; ctx.font='10.5px sans-serif'; ctx.textAlign='center';
+  ctx.fillStyle='#7C8588'; ctx.font='10.5px sans-serif'; ctx.textAlign='center';
   ctx.fillText('ตำแหน่งภายในเอลิเมนต์', padL+plotW/2, panelBTop+panelH+18);
 }
 
@@ -1946,16 +1993,16 @@ function renderMeshStep(main){
   const orderRow = document.createElement('div'); orderRow.className='shape-choice';
   let svgLinear, svgQuad;
   if(state.dimension==='1d'){
-    svgLinear = `<svg viewBox="0 0 60 52"><line x1="6" y1="30" x2="54" y2="30" stroke="#5b6b7d" stroke-width="1.6"/>
-      <circle cx="6" cy="30" r="4" fill="#1d4ed8"/><circle cx="54" cy="30" r="4" fill="#1d4ed8"/></svg>`;
-    svgQuad = `<svg viewBox="0 0 60 52"><line x1="6" y1="30" x2="54" y2="30" stroke="#5b6b7d" stroke-width="1.6"/>
-      <circle cx="6" cy="30" r="4" fill="#1d4ed8"/><circle cx="54" cy="30" r="4" fill="#1d4ed8"/><circle cx="30" cy="30" r="4" fill="#b5730a"/></svg>`;
+    svgLinear = `<svg viewBox="0 0 60 52"><line x1="6" y1="30" x2="54" y2="30" stroke="#7C8588" stroke-width="1.6"/>
+      <circle cx="6" cy="30" r="4" fill="#3FAE8C"/><circle cx="54" cy="30" r="4" fill="#3FAE8C"/></svg>`;
+    svgQuad = `<svg viewBox="0 0 60 52"><line x1="6" y1="30" x2="54" y2="30" stroke="#7C8588" stroke-width="1.6"/>
+      <circle cx="6" cy="30" r="4" fill="#3FAE8C"/><circle cx="54" cy="30" r="4" fill="#3FAE8C"/><circle cx="30" cy="30" r="4" fill="#D9A441"/></svg>`;
   } else {
-    svgLinear = `<svg viewBox="0 0 60 52"><polygon points="6,44 30,8 54,44" fill="none" stroke="#5b6b7d" stroke-width="1.6"/>
-      <circle cx="6" cy="44" r="4" fill="#1d4ed8"/><circle cx="30" cy="8" r="4" fill="#1d4ed8"/><circle cx="54" cy="44" r="4" fill="#1d4ed8"/></svg>`;
-    svgQuad = `<svg viewBox="0 0 60 52"><polygon points="6,44 30,8 54,44" fill="none" stroke="#5b6b7d" stroke-width="1.6"/>
-      <circle cx="6" cy="44" r="4" fill="#1d4ed8"/><circle cx="30" cy="8" r="4" fill="#1d4ed8"/><circle cx="54" cy="44" r="4" fill="#1d4ed8"/>
-      <circle cx="18" cy="26" r="4" fill="#b5730a"/><circle cx="42" cy="26" r="4" fill="#b5730a"/><circle cx="30" cy="44" r="4" fill="#b5730a"/></svg>`;
+    svgLinear = `<svg viewBox="0 0 60 52"><polygon points="6,44 30,8 54,44" fill="none" stroke="#7C8588" stroke-width="1.6"/>
+      <circle cx="6" cy="44" r="4" fill="#3FAE8C"/><circle cx="30" cy="8" r="4" fill="#3FAE8C"/><circle cx="54" cy="44" r="4" fill="#3FAE8C"/></svg>`;
+    svgQuad = `<svg viewBox="0 0 60 52"><polygon points="6,44 30,8 54,44" fill="none" stroke="#7C8588" stroke-width="1.6"/>
+      <circle cx="6" cy="44" r="4" fill="#3FAE8C"/><circle cx="30" cy="8" r="4" fill="#3FAE8C"/><circle cx="54" cy="44" r="4" fill="#3FAE8C"/>
+      <circle cx="18" cy="26" r="4" fill="#D9A441"/><circle cx="42" cy="26" r="4" fill="#D9A441"/><circle cx="30" cy="44" r="4" fill="#D9A441"/></svg>`;
   }
   const nodeCountLinear = state.dimension==='1d' ? '2 nodes/element' : '3 nodes/element';
   const nodeCountQuad = state.dimension==='1d' ? '3 nodes/element' : '6 nodes/element';
@@ -1972,7 +2019,7 @@ function renderMeshStep(main){
   orderRow.appendChild(orderLinearBtn); orderRow.appendChild(orderQuadBtn);
   main.appendChild(orderRow);
   const legend = document.createElement('div'); legend.className='eq-note'; legend.style.marginBottom='16px';
-  legend.innerHTML = `<span style="color:#1d4ed8">●</span> โหนดมุม (corner node) &nbsp; <span style="color:#b5730a">●</span> โหนดกลาง${state.dimension==='1d'?'เอลิเมนต์':'ขอบ'} (mid node, มีเฉพาะ quadratic)`;
+  legend.innerHTML = `<span style="color:#3FAE8C">●</span> โหนดมุม (corner node) &nbsp; <span style="color:#D9A441">●</span> โหนดกลาง${state.dimension==='1d'?'เอลิเมนต์':'ขอบ'} (mid node, มีเฉพาะ quadratic)`;
   main.appendChild(legend);
 
   if(state.elementOrder==='quadratic' && state.analysisType==='transient'){
@@ -2057,8 +2104,8 @@ function renderMeshStep(main){
     const summary = document.createElement('div'); summary.className='eq-block'; summary.style.background='#fff'; summary.style.borderColor='var(--border-strong)';
     summary.innerHTML = `<div class="eq-caption" style="margin-bottom:10px;">สรุปข้อมูลเมช (${state.elementOrder==='linear'?'first order':'second order'})</div>
       <div style="display:flex; gap:32px; font-family:var(--mono);">
-        <div><div class="unit">จำนวน Element</div><div style="font-size:20px; font-weight:700; color:var(--blue-deep);">${state.mesh.elements.length}</div></div>
-        <div><div class="unit">จำนวน Node</div><div style="font-size:20px; font-weight:700; color:var(--blue-deep);">${state.mesh.nodes.length}</div></div>
+        <div><div class="unit">จำนวน Element</div><div style="font-size:20px; font-weight:700; color:var(--mint-deep);">${state.mesh.elements.length}</div></div>
+        <div><div class="unit">จำนวน Node</div><div style="font-size:20px; font-weight:700; color:var(--mint-deep);">${state.mesh.nodes.length}</div></div>
       </div>`;
     main.appendChild(summary);
 
@@ -2567,8 +2614,8 @@ function renderSteadyResults(main){
     exBox.innerHTML = `<div class="eq-caption" style="margin-bottom:8px;">เปรียบเทียบกับ Exact Solution — ${exact.method}</div>`;
     const statsRow = document.createElement('div'); statsRow.style.display='flex'; statsRow.style.gap='28px'; statsRow.style.fontFamily='var(--mono)'; statsRow.style.marginBottom='8px';
     statsRow.innerHTML = `
-      <div><div class="unit">Max error</div><div style="font-size:17px; font-weight:700; color:var(--blue-deep);">${exact.maxErr.toExponential(3)} °C</div></div>
-      <div><div class="unit">RMS error</div><div style="font-size:17px; font-weight:700; color:var(--blue-deep);">${exact.rmsErr.toExponential(3)} °C</div></div>`;
+      <div><div class="unit">Max error</div><div style="font-size:17px; font-weight:700; color:var(--mint-deep);">${exact.maxErr.toExponential(3)} °C</div></div>
+      <div><div class="unit">RMS error</div><div style="font-size:17px; font-weight:700; color:var(--mint-deep);">${exact.rmsErr.toExponential(3)} °C</div></div>`;
     exBox.appendChild(statsRow);
     const noteEl = document.createElement('div'); noteEl.className='eq-note'; noteEl.textContent = exact.note + (exact.statsExcludeBoundary ? ' (คำนวณ error จากโหนดภายในเท่านั้น)' : '');
     exBox.appendChild(noteEl);
@@ -2594,7 +2641,7 @@ function drawExactContour(canvas, mesh, Texact, min, max){
   const tf = fitTransform(mesh.bbox, canvas.width, canvas.height, 18);
   fillContourGradient(canvas, mesh, Texact, min, max, tf);
   const ctx = canvas.getContext('2d');
-  ctx.strokeStyle = '#1c2a3a'; ctx.lineWidth=1.2;
+  ctx.strokeStyle = '#3A4145'; ctx.lineWidth=1.2;
   drawOutline(ctx, mesh, tf);
 }
 
