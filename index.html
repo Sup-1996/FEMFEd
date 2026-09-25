@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FEMFEd — Finite Element Method For Education</title>
+<link rel="preload" href="fonts/ibm-plex-sans-thai-thai-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/ibm-plex-sans-thai-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -14,7 +16,10 @@
 
 <div class="layout">
   <nav class="steps" id="stepsNav"></nav>
-  <main id="mainPanel"></main>
+  <div class="main-col">
+    <main id="mainPanel"></main>
+    <div class="actions-bar" id="actionsBar"></div>
+  </div>
   <aside class="info" id="infoPanel"></aside>
 </div>
 

@@ -20,6 +20,54 @@ npx serve .
 Then open the printed `localhost` URL. That's the only "build step" — there
 isn't one otherwise.
 
+## Package 1 — bug fixes + visual refresh (this round)
+
+Scope was deliberately limited to: real bugs, corrupted Thai text, and a
+visual/typography/layout refresh — no workflow or content changes yet
+(those are packages 2 and 3).
+
+**Bugs fixed:**
+- `solve-step.js`'s solver-method `<select>` called `renderMain()` without
+  importing it, throwing a `ReferenceError` on every change and leaving
+  the solver description stale. Now imported and working.
+- `generateMesh()` had no error handling in the mesh step, so a bad
+  freeform-polygon mesh would fail silently (the `errDiv` existed but was
+  never wired up). It's now wrapped in try/catch and reports the error.
+- A handful of Thai strings corrupted during the original PDF-to-code
+  recovery (`ไม่มกี ารไหล`, `ทันที่`, `เครืองหมาย`, `พืนฐาน`/`พืนที่`,
+  `เชือมจุด`, `รอบวนซำ`) are now corrected.
+- A `position:sticky` action bar (tried mid-refresh) turned out to
+  overlap scrolled content inside a scroll container — see the CSS
+  comment above `.actions-bar` in `styles.css` if you're curious why.
+  Fixed by making it a genuine sibling footer instead.
+
+**Visual refresh:**
+- Self-hosted IBM Plex Sans Thai (400/500/600/700, Thai+Latin subsets) —
+  see `/fonts` (OFL license) — replacing the old Times-New-Roman/system-
+  font fallback stack, so Thai and Latin text render consistently on any
+  device.
+- Deepened color palette for WCAG AA contrast (secondary text was
+  ~3.8:1 on white before; now ≥5.6:1 everywhere it's used) while keeping
+  the mint/amber identity, which deliberately echoes the app's own
+  cool/hot temperature colormap.
+- Numbered step-rail nav with a connecting spine (a real sequence, so
+  earned rather than decorative), sticky at the top on narrow screens.
+- Persistent Back/Next footer (`#actionsBar`, a flex sibling of
+  `#mainPanel`, not part of its scroll area) — fixed to the bottom of
+  the screen on mobile.
+- HiDPI-aware canvas rendering (`js/render/hidpi.js`) so every canvas
+  (mesh preview, contour plot, shape-function diagram, etc.) renders
+  crisply on high-density displays instead of the browser upscaling a
+  blurry low-res bitmap.
+- Responsive down to phone widths: the 3-column wizard shell collapses
+  to a single scrolling column with a horizontal step strip below ~880px.
+- Visible keyboard focus rings, `prefers-reduced-motion` support.
+
+Not in this pass (candidates for package 2 per the standing proposal):
+the `eq-btn`/`shape-btn`/`step-item` choice controls are still plain
+`<div>`s rather than real, keyboard-operable `<button>`s; the nav's ✓
+mark still just means "past this step," not "step's inputs are valid."
+
 ## Why this layout
 
 The original file mixed five different concerns in one script tag: mesh
@@ -32,9 +80,10 @@ The split follows those five concerns:
 
 ```
 femfed/
-├── index.html                  ← thin shell: header + 3 empty panels + <script type="module">
+├── index.html                  ← thin shell: header + nav/main/footer/aside + <script type="module">
 ├── css/
-│   └── styles.css              ← unchanged, just pulled out of <style>
+│   └── styles.css              ← visual design system (see Package 1 above)
+├── fonts/                      ← self-hosted IBM Plex Sans Thai (OFL license)
 └── js/
     ├── main.js                 ← one line: renderAll()
     ├── state.js                ← the `state` object + STEPS wizard config
@@ -58,6 +107,7 @@ femfed/
     │   └── transient-solver.js     solveTransientHeatConduction()
     │
     ├── render/                 ← "given a mesh/result, draw it on a <canvas>"
+    │   ├── hidpi.js                sizeCanvas() — device-pixel-aware canvas sizing
     │   ├── colormap.js             the rainbow temperature scale
     │   ├── canvas-transform.js     fitTransform() + triangle list for drawing
     │   ├── contour-canvas.js       2D gradient fill, outline, colorbar
@@ -90,7 +140,7 @@ trigger a re-render) — that's a deliberate two-way edge, not a mistake, and
 it's fine in ES modules as long as neither side calls the other *while the
 module is loading*, which none of these do.
 
-## What changed vs. a pure copy-paste
+## What changed vs. a pure copy-paste (original split)
 
 Everything is behavior-for-behavior the same **except** one small thing:
 the transient-results play/pause button used to reach into a bare
@@ -98,7 +148,8 @@ module-level `let playbackTimer` variable that lived next to `renderMain`.
 That's now `js/ui/playback.js` (`startPlayback` / `stopPlayback` /
 `isPlaying`), so the step file doesn't need a raw import of a mutable
 variable from the layout module. Everything else — every formula, every
-DOM structure, every class name — is unchanged.
+DOM structure, every class name — is unchanged. (Package 1, above, changes
+more of this deliberately — see that section.)
 
 ## Adding the "Structural (elastic)" equation later
 
@@ -117,47 +168,36 @@ vowels and tone marks (ั ิ ี ึ ื ่ ้ ๊ ๋ ์) get dropped, dup
 reordered depending on how the PDF's font was embedded, in a way that's
 invisible when you *look* at the PDF but corrupts the text underneath it.
 
-I did a careful multi-pass recovery: reconstructed every line from the
-PDF's own line-number gutter (`pdftotext -layout`), then found and fixed
-the systematic reordering patterns by pattern-matching (e.g. `ร` + `า` +
-`้` needing to become `ร` + `้` + `า`, stray spaces inserted around
-combining marks, a recurring bug that shifted `ิ`/`ี` one consonant to
-the right). I verified the result by running the reconstructed script
-through `node --check` until it parsed cleanly, and ran a full functional
-smoke test (see below) through every wizard step, both dimensions, both
-element orders, both solvers, and both analysis types.
+A careful multi-pass recovery reconstructed every line from the PDF's own
+line-number gutter (`pdftotext -layout`), then found and fixed the
+systematic reordering patterns by pattern-matching. Package 1 (above)
+caught and fixed several more of these that the original recovery pass
+missed, found by a fresh read-through of every string in the app.
 
-That said — I don't have your original file, so I can't diff against
-ground truth. **If you still have the real `.html` file, it's worth a
-quick visual diff of the Thai strings**, especially in the longer prose
+That said — if you still have the real `.html` file, a quick visual diff
+of the Thai strings is still worth doing, especially in the longer prose
 notes (the ones explaining Gibbs phenomenon, HRZ lumping, and the
 quadratic-transient overshoot warning) in:
 - `js/ui/steps/mesh-step.js`
 - `js/solver/exact-solutions.js`
 - `js/ui/steps/solve-step.js`
 
-Everything else — labels, button text, table headers — is short enough
-that a glance while using the app will catch anything off. If you paste
-me the original `.html`, I can do an exact diff and fix anything I got
-wrong in minutes.
-
-## What I actually tested
+## What's been tested
 
 - **Every file** passes `node --check` (valid JS syntax) individually.
 - **Every `import { x } from './y.js'`** resolves to a real `export` in
-  the target file (checked programmatically across all 32 files — no
-  typos, no stale paths).
-- **A full functional smoke test** (no real browser available here, so
-  this runs under Node with a minimal hand-written DOM/canvas stub —
-  it exercises the actual logic, not pixel output): equation step →
-  geometry (rectangle, 1D bar, and a freeform polygon) → material → BC →
-  mesh (linear and quadratic) → solve, for both the CG and direct
-  solvers, and separately a full transient run with the time-scrubber
-  and play/pause controls. All of it ran without errors, and the 1D
-  fixed-100/fixed-0 case's solved min/max (0/100) matched the expected
-  linear profile.
+  the target file.
+- **Package 1's changes were tested in an actual headless browser**
+  (not just simulated), clicking through: both dimensions (1D/2D), all
+  three 2D shapes (rectangle, and a hand-drawn L-shaped polygon), both
+  element orders, both solvers, both analysis types (steady + transient,
+  including the play/pause/restart scrubber), the 4-edge-Dirichlet
+  Fourier-series exact-solution comparison, devicePixelRatio 1 and 2 (to
+  check the HiDPI canvas math), and the responsive layout at desktop,
+  tablet, and phone widths (375–1400px) — with the browser console
+  watched for errors throughout. All of it ran clean.
 
-What I could **not** test here: actual pixel-correct canvas rendering,
-mobile layout, and real click-through in an actual browser — there's no
-display in this environment. I'd still open it in a real browser and
-click through all six steps once before you trust it fully.
+What still hasn't been tested: real click-through on an actual physical
+phone/tablet (only viewport emulation), and other browser engines
+(only Chromium was available here) — worth a quick manual pass before
+you fully trust it.
