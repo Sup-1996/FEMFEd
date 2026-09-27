@@ -5,7 +5,8 @@ import { bboxFor2DShape } from '../mesh/shape-info.js';
 /**
  * Canvas rendering for the 2D shape preview used across the geometry,
  * boundary-condition and mesh steps: the live polygon-drawing canvas
- * (grid + placed points + closing dashed segment), and the "preview
+ * (grid + placed points + closing dashed segment + an optional ghost
+ * point/rubber-band line previewing the next click), and the "preview
  * shape" outline (rectangle or finalized polygon) with an optional
  * highlighted edge.
  *
@@ -27,7 +28,7 @@ import { bboxFor2DShape } from '../mesh/shape-info.js';
   export const DRAW_GRID_SPACING = 0.5; // meters between grid lines
   export const DRAW_SNAP = 0.05; // meters — clicked points snap to this grid
 
-  export function drawPolygonDraftCanvas(cv){
+  export function drawPolygonDraftCanvas(cv, hover){
     const ctx = cv.getContext('2d');
     const dpr = cv._dpr || 1;
     const W = cv._cssW || cv.width, H = cv._cssH || cv.height;
@@ -57,6 +58,21 @@ import { bboxFor2DShape } from '../mesh/shape-info.js';
           ctx.fillStyle = i===0 ? '#D9A441' : '#3FAE8C';
           ctx.fill();
         });
+      }
+
+      // Ghost preview of where the next click would land (snapped), plus a
+      // faint rubber-band line from the last placed point — helps judge
+      // the next segment before committing to it.
+      if(hover){
+        const [hx,hy] = toPx(hover);
+        if(verts.length>0){
+          const [lx,ly] = toPx(verts[verts.length-1]);
+          ctx.setLineDash([4,4]); ctx.strokeStyle='rgba(217,164,65,0.6)'; ctx.lineWidth=1.5;
+          ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(hx,hy); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.beginPath(); ctx.arc(hx,hy,6,0,Math.PI*2);
+        ctx.strokeStyle='#D9A441'; ctx.lineWidth=2; ctx.stroke();
       }
   }
 
