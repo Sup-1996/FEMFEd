@@ -11,7 +11,11 @@ import { renderAll } from './layout.js';
  *   of every step panel.
  * - navButtons(main, opts): the "back" / "next" button row, rendered
  *   into the persistent #actionsBar footer rather than into `main`
- *   itself (see the function body for why).
+ *   itself (see the function body for why). Returns {backBtn, nextBtn}
+ *   so a step that can update its own validity live (e.g. bc-step
+ *   deciding a BC is now sufficient to proceed) can toggle nextBtn's
+ *   `disabled` directly instead of forcing a full re-render just to
+ *   change one button's state.
  * - numField(label, value, unit, onChange): a labelled numeric input,
  *   used by the geometry and material steps.
  * - refreshPreviewIfPresent(): re-draws the geometry step's preview
@@ -27,16 +31,19 @@ import { renderAll } from './layout.js';
 
   export function navButtons(main, {back, next, nextLabel, onNext, nextDisabled}){
     const div = document.createElement('div'); div.className='actions';
+    let backBtn=null, nextBtn=null;
     if(back){
-      const b = document.createElement('button'); b.className='secondary'; b.textContent='← ย้อนกลับ';
-      b.onclick = ()=>{ state.step--; renderAll(); };
-      div.appendChild(b);
+      backBtn = document.createElement('button'); backBtn.className='secondary'; backBtn.textContent='← ย้อนกลับ';
+      backBtn.type='button';
+      backBtn.onclick = ()=>{ state.step--; renderAll(); };
+      div.appendChild(backBtn);
     }
     if(next){
-      const n = document.createElement('button'); n.className='primary'; n.textContent = nextLabel || 'ถัดไป →';
-      n.disabled = !!nextDisabled;
-      n.onclick = onNext;
-      div.appendChild(n);
+      nextBtn = document.createElement('button'); nextBtn.className='primary'; nextBtn.textContent = nextLabel || 'ถัดไป →';
+      nextBtn.type='button';
+      nextBtn.disabled = !!nextDisabled;
+      nextBtn.onclick = onNext;
+      div.appendChild(nextBtn);
     }
     // Rendered into the persistent #actionsBar footer (a flex sibling of
     // #mainPanel, outside its scroll area — see index.html/layout.js) so
@@ -45,6 +52,7 @@ import { renderAll } from './layout.js';
     // itself. The `main` parameter is accepted for a stable call signature
     // across every step file, even though this appends elsewhere.
     document.getElementById('actionsBar').appendChild(div);
+    return { backBtn, nextBtn };
   }
 
   export function numField(labelText, value, unit, onChange){

@@ -22,17 +22,25 @@ import { renderSolveStep } from './steps/solve-step.js';
  * stops any running transient-playback timer first - otherwise a timer
  * left over from the solve step would keep firing against elements
  * that no longer exist.
+ *
+ * renderMain() preserves main's scroll position across the rebuild (it
+ * used to always snap back to the top, which was jarring for the
+ * dropdown/value changes on a long step like "bc" that call it). A
+ * step *transition* should still start at the top, though, so
+ * renderAll() resets scrollTop itself right after calling renderMain().
  */
 
 export function renderAll(){
   renderNav();
   renderMain();
   renderInfo();
+  document.getElementById('mainPanel').scrollTop = 0;
 }
 
 export function renderMain(){
   stopPlayback();
   const main = document.getElementById('mainPanel');
+  const prevScroll = main.scrollTop;
   main.innerHTML = '';
   document.getElementById('actionsBar').innerHTML = ''; // navButtons() renders here, not into `main` — see dom-helpers.js
   const key = STEPS[state.step].key;
@@ -42,4 +50,5 @@ export function renderMain(){
   else if(key==='mesh') renderMeshStep(main);
   else if(key==='bc') renderBcStep(main);
   else if(key==='solve') renderSolveStep(main);
+  main.scrollTop = prevScroll;
 }
