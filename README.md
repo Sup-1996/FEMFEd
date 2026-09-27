@@ -20,6 +20,74 @@ npx serve .
 Then open the printed `localhost` URL. That's the only "build step" — there
 isn't one otherwise.
 
+## Package 2 — flow/UX + accessibility (this round)
+
+Scope: the "C" (workflow) and "E" (accessibility) items from the standing
+proposal. No new files — every change below is an edit to a Package 1
+file, listed under "Files changed" at the end of this section.
+
+**Removed the "Set" buttons (material step, BC step):** every field
+already wrote to `state` on every keystroke; the button only refreshed a
+summary line. Values now apply live and the summary updates with them —
+one less click, and it was never doing anything else.
+
+**BC step no longer fully re-renders on every edit:** changing a value
+now patches just the applied-BC tags and the Next button's enabled
+state; changing an edge's *type* (which genuinely needs different
+inputs) rebuilds only that one table cell. Previously every keystroke's
+Enter/blur — or the Set button — called a full `renderMain()`, which
+also reset your scroll position on a step that can run long. `renderMain()`
+itself now also preserves scroll position generically (see `layout.js`)
+as a second line of defense, while a true step *transition* (`renderAll()`)
+still starts at the top as expected.
+
+**Foldable theory blocks:** every `.eq-block` is now a `<details>` you
+can collapse — a free accessibility win too, since `<summary>` is
+natively keyboard-operable. Core, load-bearing equations (the governing
+equation, the per-step main interpolation formula, the assembled system
+equation) default **open**; secondary/illustrative material (the shape-
+function diagram, the discretized-element aside, the BC type
+definitions table) defaults **closed**. See `render/equation-markup.js`'s
+`collapsibleBlock()`/`eqBlock()` if you want to change any default.
+
+**Mesh density presets:** หยาบ/กลาง/ละเอียด buttons on the mesh step
+fill in the max-elements field with a sensible starting value (scaled
+for 1D vs 2D); the exact number field is still there for fine control
+or for a convergence-study lesson.
+
+**Polygon draw tool:** a ghost point now follows the mouse (with a
+rubber-band line to the last placed point) before you click, plus a
+live coordinate readout — and four shape templates (L / T / triangle /
+trapezoid) fill in a ready-made point list you can still edit before
+closing the shape.
+
+**One-click starter presets:** step 1 now has three buttons that fully
+configure a model (geometry, material, BCs), mesh it, solve it, and
+jump straight to the results step — a 1D hot/cold bar, a 2D 4-edge-
+Dirichlet plate, and a 2D plate with a convective edge. Good for a
+quick classroom demo; "ย้อนกลับ" still walks back through every step to
+see how it was built.
+
+**Accessibility:** the `eq-btn`/`shape-btn` choice controls and the
+step-rail items are now real `<button>` elements (previously `<div>`s
+with an onclick, so they weren't keyboard-reachable at all) — Tab now
+reaches every control, Enter/Space activates it, and locked steps and
+the disabled "Structural" option use the native `disabled` attribute
+so assistive tech announces them correctly instead of just being
+silently unclickable divs.
+
+**Files changed (12, all edits — no new files):**
+`css/styles.css`, `js/render/equation-markup.js`,
+`js/render/shape-preview-canvas.js`, `js/ui/dom-helpers.js`,
+`js/ui/layout.js`, `js/ui/nav.js`, `js/ui/steps/bc-step.js`,
+`js/ui/steps/equation-step.js`, `js/ui/steps/geometry-step.js`,
+`js/ui/steps/material-step.js`, `js/ui/steps/mesh-step.js`,
+`js/ui/steps/solve-step.js`.
+
+Not in this pass (still open from the original proposal, package 3):
+export/save results, hover-to-read-temperature on the contour plot, a
+colorblind-safe colormap option, and saving/loading a model as JSON.
+
 ## Package 1 — bug fixes + visual refresh (this round)
 
 Scope was deliberately limited to: real bugs, corrupted Thai text, and a
@@ -196,6 +264,15 @@ quadratic-transient overshoot warning) in:
   check the HiDPI canvas math), and the responsive layout at desktop,
   tablet, and phone widths (375–1400px) — with the browser console
   watched for errors throughout. All of it ran clean.
+- **Package 2's changes were re-tested the same way**, on top of all of
+  the above: every collapsible block's open/closed default and click-to-
+  toggle, all three starter presets (confirmed each one meshes, solves,
+  and lands on the results step with a sane answer), the mesh density
+  presets, the polygon template buttons and the mouse-hover ghost
+  point/coordinate readout, and specifically that editing a BC value no
+  longer resets scroll position or rebuilds the whole step (only typing
+  or a type-change updates precisely what needs to). Same clean-console
+  bar across every scenario.
 
 What still hasn't been tested: real click-through on an actual physical
 phone/tablet (only viewport emulation), and other browser engines
