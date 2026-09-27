@@ -18,18 +18,32 @@ import { renderAll, renderMain } from '../layout.js';
  * For 2D, either a rectangle (dimensions typed in directly) or a
  * freeform polygon drawn point-by-point on a snap-to-grid canvas
  * (renderPolygonDrawTool) - self-intersection is checked with
- * isSimplePolygon() before the shape can be "closed".
+ * isSimplePolygon() before the shape can be "closed". A row of shape
+ * templates (L/T/triangle/trapezoid) fills in a ready-made point list
+ * as a starting point, which the user can still undo/adjust/close like
+ * any hand-drawn shape.
  */
+
+  // Ready-made point lists for the polygon draw tool's template buttons
+  // (meters; POLYGON_TEMPLATES normalizes to a corner at the origin the
+  // same way a hand-drawn shape does, via finalize, so any of these are
+  // fine as-is).
+  const POLYGON_TEMPLATES = {
+    L: [[0,0],[2,0],[2,1],[1,1],[1,2],[0,2]],
+    T: [[0,0],[3,0],[3,1],[2,1],[2,2],[1,2],[1,1],[0,1]],
+    triangle: [[0,0],[2,0],[1,1.6]],
+    trapezoid: [[0,0],[2,0],[1.5,1],[0.5,1]],
+  };
 
   export function renderGeometryStep(main){
     makeTitle(main, 'สร้างรูปทรงโมเดล', 'เลือกมิติของโมเดล และเลือกรูปทรงจากเทมเพลตสำเร็จรูป หรือวาดรูปร่างเองแล้วกำหนดขนาดเป็นตัวเลข (หน่วยเมตร)');
 
       const dimRow = document.createElement('div'); dimRow.className='eq-choice';
-      const dim1D = document.createElement('div');
+      const dim1D = document.createElement('button'); dim1D.type='button';
       dim1D.className='eq-btn'+(state.dimension==='1d'?' sel':'');
       dim1D.innerHTML = `1D — เส้น (line/rod)<span class="tag">เหมาะสำหรับเรียนพื้นฐาน</span>`;
       dim1D.onclick = ()=>{ state.dimension='1d'; state.shape='line'; state.mesh=null; state.results=null; renderAll(); };
-      const dim2D = document.createElement('div');
+      const dim2D = document.createElement('button'); dim2D.type='button';
       dim2D.className='eq-btn'+(state.dimension==='2d'?' sel':'');
       dim2D.innerHTML = `2D — พื้นที่ระนาบ<span class="tag">สี่เหลี่ยม/วาดเอง</span>`;
       dim2D.onclick = ()=>{ state.dimension='2d'; if(state.shape==='line') state.shape='rectangle'; state.mesh=null; state.results=null; renderAll(); };
@@ -55,11 +69,11 @@ import { renderAll, renderMain } from '../layout.js';
       }
 
       const shapes = document.createElement('div'); shapes.className='shape-choice';
-      const rectBtn = document.createElement('div');
+      const rectBtn = document.createElement('button'); rectBtn.type='button';
       rectBtn.className='shape-btn'+(state.shape==='rectangle'?' sel':'');
       rectBtn.innerHTML = `<svg viewBox="0 0 40 40"><rect x="5" y="10" width="30" height="20" fill="none" stroke="${state.shape==='rectangle'?'#3FAE8C':'#7C8588'}" stroke-width="2"/></svg><span>สี่เหลี่ยม</span>`;
       rectBtn.onclick = ()=>{ state.shape='rectangle'; state.mesh=null; state.results=null; renderAll(); };
-      const polyBtn = document.createElement('div');
+      const polyBtn = document.createElement('button'); polyBtn.type='button';
       polyBtn.className='shape-btn'+(state.shape==='polygon'?' sel':'');
       polyBtn.innerHTML = `<svg viewBox="0 0 40 40"><polygon points="4,30 14,6 32,10 36,26 20,36" fill="none" stroke="${state.shape==='polygon'?'#3FAE8C':'#7C8588'}" stroke-width="2"/></svg><span>วาดรูปร่างเอง</span>`;
       polyBtn.onclick = ()=>{ state.shape='polygon'; state.mesh=null; state.results=null; renderAll(); };
@@ -90,25 +104,53 @@ import { renderAll, renderMain } from '../layout.js';
 
       if(!p.finalized){
         const desc = document.createElement('p'); desc.className='panel-desc';
-        desc.textContent = `คลิกบนตารางเพื่อวางจุดต่อเนื่องกันเป็นเส้นตรง (พื้นที่วาดสูงสุด ${(460/DRAW_SCALE).toFixed(1)} × ${(340/DRAW_SCALE).toFixed(1)} ม., จุดจะสแนปเข้าตาราง ${DRAW_SNAP} ม.) เมื่อวางครบแล้วกด "ปิดรูปร่าง" เพื่อเชื่อมจุดสุดท้ายกลับไปยังจุดแรก`;
+        desc.textContent = `คลิกบนตารางเพื่อวางจุดต่อเนื่องกันเป็นเส้นตรง (พื้นที่วาดสูงสุด ${(460/DRAW_SCALE).toFixed(1)} × ${(340/DRAW_SCALE).toFixed(1)} ม., จุดจะสแนปเข้าตาราง ${DRAW_SNAP} ม.) เมื่อวางครบแล้วกด "ปิดรูปร่าง" เพื่อเชื่อมจุดสุดท้ายกลับไปยังจุดแรก หรือเริ่มจากเทมเพลตด้านล่างแล้วปรับแต่งเอาก็ได้`;
           main.appendChild(desc);
+
+          const templateRow = document.createElement('div'); templateRow.className='shape-choice'; templateRow.style.marginBottom='10px';
+          const templateLabels = { L:'ตัว L', T:'ตัว T', triangle:'สามเหลี่ยม', trapezoid:'สี่เหลี่ยมคางหมู' };
+          Object.entries(templateLabels).forEach(([key,label])=>{
+            const b = document.createElement('button'); b.type='button'; b.className='secondary';
+            b.textContent = label;
+            b.onclick = ()=>{
+              p.vertices = POLYGON_TEMPLATES[key].map(([x,y])=>({x,y}));
+              renderMain();
+            };
+            templateRow.appendChild(b);
+          });
+          main.appendChild(templateRow);
 
           const wrap = document.createElement('div'); wrap.className='canvas-wrap';
           const cv = document.createElement('canvas'); sizeCanvas(cv, 460, 340); cv.style.cursor='crosshair';
           wrap.appendChild(cv);
           main.appendChild(wrap);
 
+          const hoverInfo = document.createElement('div'); hoverInfo.className='unit'; hoverInfo.style.marginTop='6px'; hoverInfo.style.minHeight='1.2em';
+          main.appendChild(hoverInfo);
+
           const errDiv = document.createElement('div'); errDiv.className='error';
           main.appendChild(errDiv);
 
-          cv.addEventListener('click', (e)=>{
+          function snappedPoint(e){
             const rect = cv.getBoundingClientRect();
             const px = e.clientX-rect.left, py = e.clientY-rect.top;
             const cssH = cv._cssH || cv.height;
             let x = Math.round((px/DRAW_SCALE)/DRAW_SNAP)*DRAW_SNAP;
             let y = Math.round(((cssH-py)/DRAW_SCALE)/DRAW_SNAP)*DRAW_SNAP;
-            x = Math.max(0, x); y = Math.max(0, y);
-            p.vertices.push({x,y});
+            return { x: Math.max(0,x), y: Math.max(0,y) };
+          }
+
+          cv.addEventListener('mousemove', (e)=>{
+            const pt = snappedPoint(e);
+            hoverInfo.textContent = `ตำแหน่งเมาส์: (${pt.x.toFixed(2)}, ${pt.y.toFixed(2)}) ม.`;
+            drawPolygonDraftCanvas(cv, pt);
+          });
+          cv.addEventListener('mouseleave', ()=>{
+            hoverInfo.textContent = '';
+            drawPolygonDraftCanvas(cv, null);
+          });
+          cv.addEventListener('click', (e)=>{
+            p.vertices.push(snappedPoint(e));
             renderMain();
           });
 
@@ -141,7 +183,7 @@ import { renderAll, renderMain } from '../layout.js';
           info.textContent = `จำนวนจุดที่วางแล้ว: ${p.vertices.length}`;
           main.appendChild(info);
 
-        drawPolygonDraftCanvas(cv);
+        drawPolygonDraftCanvas(cv, null);
         navButtons(main, { back:true, next:false });
       } else {
         const bbox = bboxFor2DShape();

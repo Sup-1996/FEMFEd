@@ -1,6 +1,6 @@
 import { state } from '../../state.js';
 import { makeTitle, navButtons } from '../dom-helpers.js';
-import { eqBlock, frac, rm } from '../../render/equation-markup.js';
+import { eqBlock, collapsibleBlock, frac, rm } from '../../render/equation-markup.js';
 import { drawShapeFunctionDiagram } from '../../render/shape-function-diagram.js';
 import { draw1DMesh } from '../../render/domain-1d-canvas.js';
 import { drawMeshCanvas } from '../../render/contour-canvas.js';
@@ -37,12 +37,12 @@ import { renderAll } from '../layout.js';
   }
   const nodeCountLinear = state.dimension==='1d' ? '2 nodes/element' : '3 nodes/element';
   const nodeCountQuad = state.dimension==='1d' ? '3 nodes/element' : '6 nodes/element';
-  const orderLinearBtn = document.createElement('div');
+  const orderLinearBtn = document.createElement('button'); orderLinearBtn.type='button';
   orderLinearBtn.className='shape-btn'+(state.elementOrder==='linear'?' sel':'');
   orderLinearBtn.style.width='150px';
   orderLinearBtn.innerHTML = svgLinear + `<span>First order (linear)<br><span class="unit">${nodeCountLinear}</span></span>`;
   orderLinearBtn.onclick = ()=>{ state.elementOrder='linear'; state.mesh=null; state.results=null; renderAll(); };
-  const orderQuadBtn = document.createElement('div');
+  const orderQuadBtn = document.createElement('button'); orderQuadBtn.type='button';
   orderQuadBtn.className='shape-btn'+(state.elementOrder==='quadratic'?' sel':'');
   orderQuadBtn.style.width='150px';
   orderQuadBtn.innerHTML = svgQuad + `<span>Second order (quadratic)<br><span class="unit">${nodeCountQuad}</span></span>`;
@@ -59,7 +59,8 @@ import { renderAll } from '../layout.js';
       main.appendChild(warn);
   }
 
-  // --- Shape function interpolation (depends on order & dimension) ---
+  // --- Shape function interpolation (depends on order & dimension) — the
+  // core concept for this step, so it stays open by default. ---
   if(state.dimension==='1d'){
     if(state.elementOrder==='linear'){
       eqBlock(main, 'การประมาณค่าอุณหภูมิภายในแต่ละเอลิเมนต์',
@@ -85,31 +86,48 @@ import { renderAll } from '../layout.js';
    }
 
    // --- Illustration: what shape function interpolation actually means, and why it's needed ---
-   const diagBox = document.createElement('div'); diagBox.className='eq-block';
-   const diagCap = document.createElement('div'); diagCap.className='eq-caption';
-   diagCap.textContent = 'shape function interpolation คืออะไร และมีไว้ทำไม';
-   diagBox.appendChild(diagCap);
+   // Secondary/supplementary material, so it starts collapsed.
+   const diagBody = collapsibleBlock(main, 'shape function interpolation คืออะไร และมีไว้ทำไม', false);
    const diagIntro = document.createElement('div'); diagIntro.className='eq-note'; diagIntro.style.marginBottom='8px';
    diagIntro.innerHTML = 'FEM รู้ค่าอุณหภูมิเฉพาะที่ <b>โหนด</b> เท่านั้น แต่ในความเป็นจริงอุณหภูมิมีค่าทุกจุดต่อเนื่องกันภายในเอลิเมนต์ — shape function N<sub>i</sub>(x) คือฟังก์ชันน้ำหนักที่ใช้ "เติมเต็ม" ค่าระหว่างโหนด ให้กลายเป็นฟังก์ชันต่อเนื่องที่คำนวณอนุพันธ์/อินทิกรัลต่อได้ (จำเป็นสำหรับการประกอบเมทริกซ์ [k<sub>e</sub>]) ตัวอย่างด้านล่างสาธิตด้วยเอลิเมนต์เส้นตรง 1 มิติ — แนวคิดเดียวกันนี้ขยายไปใช้กับเอลิเมนต์สามเหลี่ยมใน 2 มิติด้วย';
-   diagBox.appendChild(diagIntro);
+   diagBody.appendChild(diagIntro);
    const diagCv = document.createElement('canvas'); sizeCanvas(diagCv, 460, 320);
-   diagBox.appendChild(diagCv);
-   main.appendChild(diagBox);
+   diagBody.appendChild(diagCv);
    drawShapeFunctionDiagram(diagCv, state.elementOrder);
 
-    // --- Brief discretized elemental equation ---
+    // --- Brief discretized elemental equation --- (a summary aside, starts collapsed)
     eqBlock(main, 'สมการเอลิเมนต์ที่ได้จากการ discretize (โดยสังเขป)',
        `${rm('[')}k<sub>e</sub>${rm(']{')}T<sub>e</sub>${rm('} = {')}F<sub>e</sub>${rm('}')}`,
-  `เมทริกซ์ [k<sub>e</sub>] และเวกเตอร์ {F<sub>e</sub>} ของแต่ละเอลิเมนต์คำนวณจากอินทิกรัลของ k(∇N<sub>i</sub>·∇N<sub>j</sub>) และ Q·N<sub>i</sub> ตามลำดับ แล้วนำไปประกอบรวม (assemble) เป็นระบบสมการรวมทั้งโมเดลในขั้นตอนถัดไป`
+  `เมทริกซ์ [k<sub>e</sub>] และเวกเตอร์ {F<sub>e</sub>} ของแต่ละเอลิเมนต์คำนวณจากอินทิกรัลของ k(∇N<sub>i</sub>·∇N<sub>j</sub>) และ Q·N<sub>i</sub> ตามลำดับ แล้วนำไปประกอบรวม (assemble) เป็นระบบสมการรวมทั้งโมเดลในขั้นตอนถัดไป`,
+   {open:false}
    );
 
+   // --- Mesh density: quick presets (หยาบ/กลาง/ละเอียด) plus the exact
+   // number field for fine control — clicking a preset just fills the
+   // field, it doesn't generate the mesh by itself. ---
+   const presets = state.dimension==='1d'
+     ? [['หยาบ',20],['กลาง',100],['ละเอียด',500]]
+     : [['หยาบ',60],['กลาง',500],['ละเอียด',2000]];
+   const presetRow = document.createElement('div'); presetRow.className='shape-choice'; presetRow.style.marginBottom='6px';
+   const presetBtns = [];
    const row = document.createElement('div'); row.className='field-row';
    const f = document.createElement('div'); f.className='field'; f.style.minWidth='220px';
    f.innerHTML = `<label>จำนวน Element สูงสุด (max elements)</label>`;
    const numInp = document.createElement('input'); numInp.type='number'; numInp.min='1'; numInp.max='5000'; numInp.step='1'; numInp.value=state.maxElements;
+   function syncPresetHighlight(){
+     presetBtns.forEach(({btn,val})=>{ btn.classList.toggle('sel', state.maxElements===val); });
+   }
+   presets.forEach(([label,val])=>{
+     const b = document.createElement('button'); b.type='button'; b.className='secondary';
+     b.textContent = `${label} (~${val})`;
+     b.onclick = ()=>{ state.maxElements = val; numInp.value = val; syncPresetHighlight(); };
+     presetRow.appendChild(b);
+     presetBtns.push({btn:b, val});
+   });
+   main.appendChild(presetRow);
    numInp.addEventListener('input', ()=>{
      const v = parseInt(numInp.value);
-     if(!isNaN(v)) state.maxElements = Math.max(1, Math.min(5000, v));
+     if(!isNaN(v)){ state.maxElements = Math.max(1, Math.min(5000, v)); syncPresetHighlight(); }
    });
    numInp.addEventListener('blur', ()=>{ numInp.value = state.maxElements; });
    f.appendChild(numInp);
@@ -117,6 +135,7 @@ import { renderAll } from '../layout.js';
    f.appendChild(u);
    row.appendChild(f);
    main.appendChild(row);
+   syncPresetHighlight();
 
    const errDiv = document.createElement('div'); errDiv.className='error';
 

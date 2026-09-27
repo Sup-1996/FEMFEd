@@ -27,21 +27,21 @@ import { renderAll, renderMain } from '../layout.js';
   const isTransient = state.analysisType==='transient';
   makeTitle(main, 'รันการจำลองและดูผลลัพธ์', `ระบบจะประกอบสมการไฟไนต์เอลิเมนต์ (${dimWord}) แล้วแก้ระบบสมการด้วยวิธีที่เลือกด้านล่าง`);
 
-  eqBlock(main, isTransient ? 'ระบบสมการที่ถูกประกอบขึ้น (semi-discrete FEM system)' : 'ระบบสมการที่ถูกประกอบขึ้น (discretized FEM system)',
+  const body = eqBlock(main, isTransient ? 'ระบบสมการที่ถูกประกอบขึ้น (semi-discrete FEM system)' : 'ระบบสมการที่ถูกประกอบขึ้น (discretized FEM system)',
       isTransient ? `${rm('[')}M${rm(']{')}dT/dt${rm('} + [')}K${rm(']{')}T${rm('} = {')}F${rm('}')}` : `${rm('[')}K${rm(']{')}T${rm('} = {')}F${rm('}')}`,
       isTransient ? 'เมทริกซ์มวลความร้อน (mass matrix [M], จาก ρc) และเมทริกซ์ความแข็งเกร็ง [K] ประกอบจากทุกเอลิเมนต์แล้วเดินเวลาด้วย Backward Euler:'
          : 'เมทริกซ์ความแข็งเกร็ง (stiffness matrix) และเวกเตอร์โหลด (load vector) คำนวณจากทุกเอลิเมนต์ในเมชและเงื่อนไขขอบเขตที่กำหนดไว้:'
   );
-  const solveDetail = document.createElement('div'); solveDetail.className='eq-block';
+  const solveDetail = body;
   if(isTransient){
-     const l1 = document.createElement('div'); l1.className='equation'; l1.style.fontSize='14.5px';
+     const l1 = document.createElement('div'); l1.className='equation'; l1.style.fontSize='14.5px'; l1.style.marginTop='6px';
      l1.innerHTML = `${rm('(')}M ${rm('+')} ${rm('Δt')}K${rm(')')} T<sup>n+1</sup> ${rm('=')} M T<sup>n</sup> ${rm('+')} ${rm('Δt')} F`;
      solveDetail.appendChild(l1);
      const noteDetail = document.createElement('div'); noteDetail.className='eq-note';
      noteDetail.textContent = 'สมการนี้เป็นระบบเชิงเส้นคงที่ (ไม่เปลี่ยนตามเวลา เพราะ Δt คงที่) จึงแก้ครั้งเดียวแล้วนำกลับมาใช้ซ้ำทุก time step ได้อย่างมีประสิทธิภาพ';
      solveDetail.appendChild(noteDetail);
   } else if(state.dimension==='1d'){
-     const l1 = document.createElement('div'); l1.className='equation'; l1.style.fontSize='14.5px';
+     const l1 = document.createElement('div'); l1.className='equation'; l1.style.fontSize='14.5px'; l1.style.marginTop='6px';
      l1.innerHTML = `K<sub>ij</sub> ${rm('=')} ${rm('∫')}<sub>0</sub><sup>L</sup> k${frac('dN','dx')}<sub>i</sub>${frac('dN','dx')}<sub>j</sub> ${rm('dx')}`;
      const l2 = document.createElement('div'); l2.className='equation'; l2.style.fontSize='14.5px'; l2.style.marginTop='6px';
      l2.innerHTML = `F<sub>i</sub> ${rm('=')} ${rm('∫')}<sub>0</sub><sup>L</sup> Q N<sub>i</sub> ${rm('dx')} ${rm('+')} ${bar('q')}N<sub>i</sub>${rm('|')}<sub>boundary</sub>`;
@@ -50,7 +50,7 @@ import { renderAll, renderMain } from '../layout.js';
      noteDetail.textContent = 'จากนั้นบังคับเงื่อนไข Fixed temperature ลงในระบบสมการ แล้วแก้หา {T} ด้วยวิธีที่เลือกด้านล่าง';
      solveDetail.appendChild(noteDetail);
   } else {
-     const l1 = document.createElement('div'); l1.className='equation'; l1.style.fontSize='14.5px';
+     const l1 = document.createElement('div'); l1.className='equation'; l1.style.fontSize='14.5px'; l1.style.marginTop='6px';
      l1.innerHTML = `K<sub>ij</sub> ${rm('=')} ${rm('∫∫')}<sub>Ω</sub> k${rm('(')}${frac('∂N','∂x')}<sub>i</sub>${frac('∂N','∂x')}<sub>j</sub> ${rm('+')} ${frac('∂N','∂y')}<sub>i</sub>${frac('∂N','∂y')}<sub>j</sub>${rm(') dA')}`;
      const l2 = document.createElement('div'); l2.className='equation'; l2.style.fontSize='14.5px'; l2.style.marginTop='6px';
      l2.innerHTML = `F<sub>i</sub> ${rm('=')} ${rm('∫∫')}<sub>Ω</sub> Q N<sub>i</sub> ${rm('dA')} ${rm('+')} ${rm('∫')}<sub>Γ<sub>N</sub></sub> ${bar('q')} N<sub>i</sub> ${rm('dΓ')}`;
@@ -59,7 +59,6 @@ import { renderAll, renderMain } from '../layout.js';
      noteDetail.textContent = 'จากนั้นบังคับเงื่อนไข Fixed temperature ลงในระบบสมการ แล้วแก้หา {T} ด้วยวิธีที่เลือกด้านล่าง';
      solveDetail.appendChild(noteDetail);
   }
-  main.appendChild(solveDetail);
 
   // --- Solver method selection ---
   const methodInfo = {
