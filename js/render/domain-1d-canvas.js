@@ -1,7 +1,8 @@
 /**
  * 1D-specific canvas rendering: the domain line (with x=0 / x=L end
  * caps and optional highlighted end), the node/element markers along
- * it, and the results line chart (numerical vs. exact, when available).
+ * it, and the results line chart (numerical vs. exact, when available)
+ * plus its mouse-hover temperature readout.
  *
  * All layout math below is in CSS-pixel space (canvas._cssW/_cssH, as
  * set by render/hidpi.js's sizeCanvas()) — the leading setTransform
@@ -9,6 +10,8 @@
  * resolution) backing store, so none of the literal pixel values in
  * this file need to know about devicePixelRatio themselves.
  */
+
+  import { showTip, hideTip } from './hover-tip.js';
 
   /* ---- 1D rendering helpers ---- */
   export function draw1DDomain(canvas, length, opts){
@@ -106,4 +109,33 @@
         ctx.beginPath(); ctx.moveTo(padL+plotW-150, padT+22); ctx.lineTo(padL+plotW-136, padT+22); ctx.stroke(); ctx.setLineDash([]);
         ctx.fillStyle='#3A4145'; ctx.fillText('Exact solution', padL+plotW-130, padT+26);
       }
+
+      // Feeds attach1DChartHover() (below): stored in CSS-pixel space
+      // since this canvas draws through a setTransform(dpr,...), unlike
+      // contour-canvas.js's device-pixel convention — see hidpi.js.
+      canvas._hoverData1D = { pts, xToPx };
+  }
+
+  /* ---- Mouse-hover readout for the 1D results chart: reports the
+     nearest node's (x, T) pair. Mirrors attachContourHover() in
+     contour-canvas.js (same shared tooltip, same "read fresh off the
+     canvas on every move" approach so it stays correct across transient
+     playback frames) but works in CSS-pixel space to match how this
+     file draws. ---- */
+  export function attach1DChartHover(canvas){
+    canvas.style.cursor = 'crosshair';
+    canvas.addEventListener('mousemove', (e)=>{
+      const data = canvas._hoverData1D;
+      if(!data || !data.pts.length){ hideTip(); return; }
+      const rect = canvas.getBoundingClientRect();
+      const cssW = canvas._cssW || canvas.width;
+      const mouseX = (e.clientX - rect.left) * (cssW / rect.width);
+      let nearest = data.pts[0], bestDist = Infinity;
+      for(const p of data.pts){
+        const d = Math.abs(data.xToPx(p.x) - mouseX);
+        if(d < bestDist){ bestDist = d; nearest = p; }
+      }
+      showTip(e.clientX, e.clientY, `x = ${nearest.x.toFixed(3)} m, T ≈ ${nearest.t.toFixed(2)} °C`);
+    });
+    canvas.addEventListener('mouseleave', hideTip);
   }

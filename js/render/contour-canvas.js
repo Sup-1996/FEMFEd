@@ -1,11 +1,14 @@
 import { state } from '../state.js';
 import { rainbowColorRGB, rainbowColor } from './colormap.js';
 import { fitTransform, getRenderTriangles } from './canvas-transform.js';
+import { showTip, hideTip } from './hover-tip.js';
 
 /**
  * 2D contour-plot rendering: per-pixel (Gouraud-style) gradient fill of
  * a mesh's temperature field, the mesh/shape outline, the colorbar
- * legend, and the small side-by-side "exact solution" contour.
+ * legend, the optional mesh-wireframe overlay, the mouse-hover
+ * temperature readout, and the small side-by-side "exact solution"
+ * contour.
  *
  * Unlike the other render/*.js files, this one deliberately keeps
  * working in the canvas's real (device-pixel) buffer size rather than
@@ -92,6 +95,70 @@ import { fitTransform, getRenderTriangles } from './canvas-transform.js';
       ctx.strokeStyle = '#3A4145';
       ctx.lineWidth = 1.4*dpr;
       drawOutline(ctx, mesh, tf);
+
+      // Feeds attachContourHover() (below): the mouse handler reads this
+      // fresh off the canvas element on every mousemove, so redrawing
+      // (a new time step, a re-solve) automatically keeps hover current
+      // without needing to re-attach anything. Only set when there's an
+      // actual temperature field to report — hovering a bare mesh
+      // preview shows no tooltip.
+      canvas._hoverData = T ? { mesh, T, min, max, tf } : null;
+  }
+
+  /* ---- Optional wireframe overlay: call right after drawMeshCanvas()
+     (never instead of it — this draws on top, it doesn't clear first)
+     when the user wants to see element boundaries against the contour
+     fill. ---- */
+  export function drawMeshWireframe(canvas, mesh, tf){
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(1,0,0,1,0,0);
+    const dpr = canvas._dpr || 1;
+    ctx.strokeStyle = 'rgba(24,34,38,0.35)';
+    ctx.lineWidth = 0.6*dpr;
+    for(const [a,b,c] of getRenderTriangles(mesh)){
+      const A=mesh.nodes[a], B=mesh.nodes[b], C=mesh.nodes[c];
+      const [ax,ay]=tf(A.x,A.y), [bx,by]=tf(B.x,B.y), [cx,cy]=tf(C.x,C.y);
+      ctx.beginPath();
+      ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.lineTo(cx,cy); ctx.closePath();
+      ctx.stroke();
+    }
+  }
+
+  /* ---- Mouse-hover temperature readout. Safe to call multiple times
+     on the same canvas (e.g. if a step re-renders and creates a fresh
+     canvas each time) since listeners go with the old element when it's
+     discarded; reads canvas._hoverData fresh on every move, so it always
+     reports whatever drawMeshCanvas() most recently drew — including
+     across transient playback frames. ---- */
+  export function attachContourHover(canvas){
+    canvas.style.cursor = 'crosshair';
+    canvas.addEventListener('mousemove', (e)=>{
+      const data = canvas._hoverData;
+      if(!data){ hideTip(); return; }
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const px = (e.clientX - rect.left) * scaleX;
+      const py = (e.clientY - rect.top) * scaleY;
+      const { mesh, T, tf } = data;
+      const eps = -0.002;
+      for(const [a,b,c] of getRenderTriangles(mesh)){
+        const A=mesh.nodes[a], B=mesh.nodes[b], C=mesh.nodes[c];
+        const [ax,ay]=tf(A.x,A.y), [bx,by]=tf(B.x,B.y), [cx,cy]=tf(C.x,C.y);
+        const denom = (by-cy)*(ax-cx) + (cx-bx)*(ay-cy);
+        if(Math.abs(denom) < 1e-10) continue;
+        const w1 = ((by-cy)*(px-cx) + (cx-bx)*(py-cy)) / denom;
+        const w2 = ((cy-ay)*(px-cx) + (ax-cx)*(py-cy)) / denom;
+        const w3 = 1-w1-w2;
+        if(w1>=eps && w2>=eps && w3>=eps){
+          const val = w1*T[a] + w2*T[b] + w3*T[c];
+          showTip(e.clientX, e.clientY, `T ≈ ${val.toFixed(2)} °C`);
+          return;
+        }
+      }
+      hideTip();
+    });
+    canvas.addEventListener('mouseleave', hideTip);
   }
 
   export function drawOutline(ctx, mesh, tf){
