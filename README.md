@@ -20,7 +20,56 @@ npx serve .
 Then open the printed `localhost` URL. That's the only "build step" — there
 isn't one otherwise.
 
-## Package 2 — flow/UX + accessibility (this round)
+## Package 3 — results-page tools (this round)
+
+Scope: the "D" (results page) items from the standing proposal, minus
+the ones you opted out of (save/load a model as JSON, colorblind-safe
+colormap). Two new files, six edited ones — see "Files" at the end.
+
+**Hover to read a value:** move the mouse over the 2D contour plot to
+get a floating "T ≈ … °C" readout at that point (interpolated from the
+element the cursor is over, same math as the fill itself), and over the
+1D results chart to get the nearest node's `x` and `T`. Works on
+transient results too and always reports the frame currently shown —
+the handler reads the latest drawn data off the canvas on every move
+rather than capturing a snapshot, so scrubbing or playing the time
+slider never leaves it stale.
+
+**Mesh overlay toggle:** a "แสดงเส้นเมชทับ contour" checkbox on the 2D
+results (steady and transient) draws the element boundaries over the
+colour fill, to see how the field relates to the mesh.
+
+**Export:** PNG of the current result canvas (exported at the canvas's
+real backing-store resolution, so on a high-density display it's sharper
+than what's on screen) and CSV of node coordinates + temperature
+(`x_m,y_m,T_C`, or `x_m,T_C` in 1D). For transient results both export
+the frame currently shown, and the file name carries its time.
+
+**Busy feedback:** "สร้างเมช" and "รันการจำลอง" now switch to a disabled
+"กำลัง…" state before starting. To be upfront about what this is: the
+computation is still synchronous and still blocks the page while it
+runs — this only lets the browser paint the button's new state first
+(via a 20 ms `setTimeout`) so it doesn't look like the click did
+nothing, and it prevents double-clicks. A genuinely non-blocking solve
+would need a Web Worker, which is a bigger change than this pass.
+
+**Small fix found along the way:** the collapse chevron (▸) was being
+drawn on *any* `.eq-caption`, including plain-`<div>` captions such as
+the exact-solution comparison panel, making them look foldable when they
+aren't. The chevron, pointer cursor and hover colour now apply only to a
+real `<summary>` (`css/styles.css`).
+
+**Files:**
+- New: `js/render/hover-tip.js`, `js/ui/export-helpers.js`
+- Changed: `css/styles.css`, `js/render/contour-canvas.js`,
+  `js/render/domain-1d-canvas.js`, `js/ui/layout.js`,
+  `js/ui/steps/mesh-step.js`, `js/ui/steps/solve-step.js`
+
+Not done, by choice: save/load model as JSON, colorblind-safe colormap.
+Also not done: a mesh-convergence comparison (solve at several densities
+and plot the error), which was only ever an optional teaching extra.
+
+## Package 2 — flow/UX + accessibility
 
 Scope: the "C" (workflow) and "E" (accessibility) items from the standing
 proposal. No new files — every change below is an edit to a Package 1
@@ -176,10 +225,13 @@ femfed/
     │
     ├── render/                 ← "given a mesh/result, draw it on a <canvas>"
     │   ├── hidpi.js                sizeCanvas() — device-pixel-aware canvas sizing
+    │   ├── hover-tip.js            the one shared floating tooltip (showTip/hideTip)
     │   ├── colormap.js             the rainbow temperature scale
     │   ├── canvas-transform.js     fitTransform() + triangle list for drawing
-    │   ├── contour-canvas.js       2D gradient fill, outline, colorbar
+    │   ├── contour-canvas.js       2D gradient fill, outline, colorbar, wireframe
+    │   │                           overlay, mouse-hover temperature readout
     │   ├── domain-1d-canvas.js     1D domain line, mesh dots, results chart
+    │   │                           (+ its hover readout)
     │   ├── shape-preview-canvas.js polygon drawing tool + shape preview
     │   ├── shape-function-diagram.js  the N_i(x) illustration on the mesh step
     │   └── equation-markup.js      frac()/rm()/bar()/vec()/eqBlock() + the
@@ -191,6 +243,7 @@ femfed/
         ├── nav.js                   left-hand step list
         ├── info-panel.js            right-hand "model summary" panel
         ├── dom-helpers.js           makeTitle(), navButtons(), numField(), …
+        ├── export-helpers.js        downloadCanvasPNG(), downloadCSV()
         ├── playback.js              the transient-results play/pause timer
         └── steps/
             ├── equation-step.js     step 1
@@ -273,6 +326,18 @@ quadratic-transient overshoot warning) in:
   longer resets scroll position or rebuilds the whole step (only typing
   or a type-change updates precisely what needs to). Same clean-console
   bar across every scenario.
+- **Package 3's changes were re-tested on top of all of that:** hover
+  readouts on the 2D contour, the 1D chart, and across transient frames
+  (checked that the same screen position reports different values at
+  different time steps, at devicePixelRatio 2 as well); the mesh overlay
+  toggle; the busy state on the Solve button; and that the PNG/CSV
+  buttons run without errors. One honest caveat: the hover tests
+  dispatch mouse events directly at the canvas rather than through
+  Puppeteer's simulated pointer, which didn't reliably reach the canvas
+  in this headless setup — it's the same handler code a real mouse
+  triggers, but I haven't watched it under a physical mouse. Likewise the
+  file downloads were checked for "no error thrown", not by opening the
+  saved files.
 
 What still hasn't been tested: real click-through on an actual physical
 phone/tablet (only viewport emulation), and other browser engines
