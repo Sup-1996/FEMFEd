@@ -408,15 +408,22 @@ aside.info h2{ font-size:13px; text-transform:none; margin:0 0 12px 0; color:var
     color:var(--ink-soft);
     margin-bottom:9px;
     font-weight:600;
-    cursor:pointer;
     display:flex;
     align-items:center;
     gap:6px;
+  }
+  /* The interactive/foldable affordances (pointer cursor, chevron, hover
+     color) apply only to a REAL <summary> — some panels (e.g. the
+     exact-solution comparison in solve-step.js) reuse .eq-caption purely
+     for its text styling on a plain <div>, which should not look
+     clickable when it isn't. */
+  summary.eq-caption{
+    cursor:pointer;
     list-style:none;
     user-select:none;
   }
-  .eq-block .eq-caption::-webkit-details-marker{ display:none; }
-  .eq-block .eq-caption::before{
+  summary.eq-caption::-webkit-details-marker{ display:none; }
+  summary.eq-caption::before{
     content:'▸';
     display:inline-block;
     font-size:11px;
@@ -424,8 +431,8 @@ aside.info h2{ font-size:13px; text-transform:none; margin:0 0 12px 0; color:var
     transition:transform .15s ease;
     flex:none;
   }
-  .eq-block[open] .eq-caption::before{ transform:rotate(90deg); }
-  .eq-block .eq-caption:hover{ color:var(--ink); }
+  .eq-block[open] summary.eq-caption::before{ transform:rotate(90deg); }
+  summary.eq-caption:hover{ color:var(--ink); }
   .eq-block .eq-body{ margin-top:2px; }
   .equation{
     font-family:var(--serif-math);
@@ -515,4 +522,20 @@ aside.info h2{ font-size:13px; text-transform:none; margin:0 0 12px 0; color:var
   main{ padding:18px 14px 84px 14px; }
   .actions-bar{ padding:10px 14px; }
   .field{ min-width:130px; }
+}
+
+/* ---- Package 3: hover tooltip (contour + 1D chart readouts) ---- */
+.contour-tip{
+  position:fixed;
+  display:none;
+  pointer-events:none;
+  z-index:20;
+  background:var(--ink);
+  color:#fff;
+  font-family:var(--mono);
+  font-size:12.5px;
+  padding:5px 9px;
+  border-radius:6px;
+  box-shadow:var(--shadow-md);
+  white-space:nowrap;
 }
