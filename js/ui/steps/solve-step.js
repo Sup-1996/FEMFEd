@@ -3,9 +3,10 @@ import { makeTitle, navButtons } from '../dom-helpers.js';
 import { eqBlock, frac, rm, bar } from '../../render/equation-markup.js';
 import { solveHeatConduction } from '../../solver/steady-solver.js';
 import { solveTransientHeatConduction } from '../../solver/transient-solver.js';
-import { draw1DMesh, draw1DResultsChart } from '../../render/domain-1d-canvas.js';
-import { drawMeshCanvas, drawColorbarInto, drawExactContour } from '../../render/contour-canvas.js';
+import { draw1DMesh, draw1DResultsChart, attach1DChartHover } from '../../render/domain-1d-canvas.js';
+import { drawMeshCanvas, drawColorbarInto, drawExactContour, drawMeshWireframe, attachContourHover } from '../../render/contour-canvas.js';
 import { sizeCanvas } from '../../render/hidpi.js';
+import { downloadCanvasPNG, downloadCSV } from '../export-helpers.js';
 import { isPlaying, startPlayback, stopPlayback } from '../playback.js';
 import { renderAll, renderMain } from '../layout.js';
 
@@ -103,16 +104,27 @@ import { renderAll, renderMain } from '../layout.js';
   runBtn.style.marginBottom='16px';
   runBtn.onclick = ()=>{
      errDiv.style.display='none';
-     try{
-       if(isTransient) solveTransientHeatConduction();
-       else solveHeatConduction();
-     } catch(e){
-       errDiv.textContent = e.message;
-       errDiv.style.display='block';
-       state.results = null;
-     }
-     if(state.results) state.transientViewStep = state.results.transient ? state.results.steps : 0;
-     renderAll();
+     runBtn.disabled = true;
+     runBtn.textContent = 'กำลังคำนวณ...';
+     // The solve itself is synchronous and can genuinely take a moment on
+     // a large mesh with the Direct solver — this setTimeout(0) just lets
+     // the browser paint the "disabled + กำลังคำนวณ..." state *before*
+     // that blocking work starts, instead of the button visually doing
+     // nothing right up until the (still fully synchronous) computation
+     // finishes. It's an honest half-measure, not a real progress bar —
+     // a true non-blocking solve would need a Web Worker.
+     setTimeout(()=>{
+       try{
+         if(isTransient) solveTransientHeatConduction();
+         else solveHeatConduction();
+       } catch(e){
+         errDiv.textContent = e.message;
+         errDiv.style.display='block';
+         state.results = null;
+       }
+       if(state.results) state.transientViewStep = state.results.transient ? state.results.steps : 0;
+       renderAll();
+     }, 20);
   };
   main.appendChild(runBtn);
 
@@ -159,14 +171,17 @@ import { renderAll, renderMain } from '../layout.js';
       main.appendChild(timeRow);
 
       let cv, cbCanvas=null;
+      let showMeshLines = false;
       if(state.dimension==='1d'){
         const wrap = document.createElement('div'); wrap.className='canvas-wrap';
         cv = document.createElement('canvas'); sizeCanvas(cv, 560, 320);
         wrap.appendChild(cv); main.appendChild(wrap);
+        attach1DChartHover(cv);
       } else {
         const wrap = document.createElement('div'); wrap.className='canvas-wrap'; wrap.style.display='flex'; wrap.style.gap='16px'; wrap.style.flexWrap='wrap';
         cv = document.createElement('canvas'); sizeCanvas(cv, 440, 320);
         wrap.appendChild(cv);
+        attachContourHover(cv);
 
           const CB_HEIGHT = 200;
           const cbWrap = document.createElement('div'); cbWrap.className='colorbar';
@@ -183,6 +198,13 @@ import { renderAll, renderMain } from '../layout.js';
           wrap.appendChild(cbWrap);
           main.appendChild(wrap);
           drawColorbarInto(cbCanvas);
+
+          const meshLineLabel = document.createElement('label'); meshLineLabel.style.display='inline-flex'; meshLineLabel.style.alignItems='center'; meshLineLabel.style.gap='6px'; meshLineLabel.style.fontSize='13.5px'; meshLineLabel.style.color='var(--ink-soft)'; meshLineLabel.style.marginTop='8px';
+          const meshLineChk = document.createElement('input'); meshLineChk.type='checkbox';
+          meshLineChk.addEventListener('change', ()=>{ showMeshLines = meshLineChk.checked; renderFrame(); });
+          meshLineLabel.appendChild(meshLineChk);
+          meshLineLabel.appendChild(document.createTextNode('แสดงเส้นเมชทับ contour'));
+          main.appendChild(meshLineLabel);
       }
 
       function renderFrame(){
@@ -197,6 +219,7 @@ import { renderAll, renderMain } from '../layout.js';
           draw1DResultsChart(cv, state.mesh, s.T, null);
         } else {
           drawMeshCanvas(cv, state.mesh, true, {T:s.T, min:results.min, max:results.max});
+          if(showMeshLines) drawMeshWireframe(cv, state.mesh, cv._hoverData.tf);
         }
       }
       renderFrame();
@@ -238,21 +261,38 @@ import { renderAll, renderMain } from '../layout.js';
       restartBtn.onclick = () => { stopPlayback(); state.transientViewStep=0; renderFrame(); syncButtons(); };
       syncButtons();
 
+      // --- Export the currently-shown frame ---
+      const exportRow = document.createElement('div'); exportRow.className='actions'; exportRow.style.marginTop='6px';
+      const pngBtn = document.createElement('button'); pngBtn.className='secondary'; pngBtn.textContent='⬇ ภาพเฟรมนี้ (PNG)';
+      pngBtn.onclick = ()=> downloadCanvasPNG(cv, `femfed-transient-t${results.timeSeries[state.transientViewStep].t.toFixed(4)}s.png`);
+      const csvBtn = document.createElement('button'); csvBtn.className='secondary'; csvBtn.textContent='⬇ ข้อมูลเฟรมนี้ (CSV)';
+      csvBtn.onclick = ()=>{
+        const s = results.timeSeries[state.transientViewStep];
+        const rows = state.mesh.nodes.map((nd,i)=> state.dimension==='1d' ? [nd.x, s.T[i]] : [nd.x, nd.y, s.T[i]]);
+        const header = state.dimension==='1d' ? ['x_m','T_C'] : ['x_m','y_m','T_C'];
+        downloadCSV(`femfed-transient-t${s.t.toFixed(4)}s.csv`, header, rows);
+      };
+      exportRow.appendChild(pngBtn); exportRow.appendChild(csvBtn);
+      main.appendChild(exportRow);
+
       const note = document.createElement('div'); note.className='eq-note'; note.style.marginTop='10px';
       note.textContent = `สเกลสีคงที่ตลอดช่วงเวลา (${results.min.toFixed(2)}–${results.max.toFixed(2)} °C) เพื่อให้เปรียบเทียบระหว่างช่วงเวลาต่าง ๆ ได้อย่างถูกต้อง — ${results.exact.note}`;
       main.appendChild(note);
   }
 
   function renderSteadyResults(main){
+    let cv;
     if(state.dimension==='1d'){
       const wrap = document.createElement('div'); wrap.className='canvas-wrap';
-      const cv = document.createElement('canvas'); sizeCanvas(cv, 560, 320);
+      cv = document.createElement('canvas'); sizeCanvas(cv, 560, 320);
       wrap.appendChild(cv); main.appendChild(wrap);
       draw1DResultsChart(cv, state.mesh, state.results.T, state.results.exact.available ? state.results.exact.T : null);
+      attach1DChartHover(cv);
     } else {
       const wrap = document.createElement('div'); wrap.className='canvas-wrap'; wrap.style.display='flex'; wrap.style.gap='16px'; wrap.style.flexWrap='wrap';
-      const cv = document.createElement('canvas'); sizeCanvas(cv, 440, 320);
+      cv = document.createElement('canvas'); sizeCanvas(cv, 440, 320);
       wrap.appendChild(cv);
+      attachContourHover(cv);
 
         const CB_HEIGHT = 200;
         const cbWrap = document.createElement('div'); cbWrap.className='colorbar';
@@ -283,7 +323,31 @@ import { renderAll, renderMain } from '../layout.js';
           drawMeshCanvas(cv, state.mesh, true);
           drawColorbarInto(cbCanvas);
           if(cvExact) drawExactContour(cvExact, state.mesh, state.results.exact.T, state.results.min, state.results.max);
+
+          const meshLineLabel = document.createElement('label'); meshLineLabel.style.display='inline-flex'; meshLineLabel.style.alignItems='center'; meshLineLabel.style.gap='6px'; meshLineLabel.style.fontSize='13.5px'; meshLineLabel.style.color='var(--ink-soft)'; meshLineLabel.style.marginTop='8px';
+          const meshLineChk = document.createElement('input'); meshLineChk.type='checkbox';
+          meshLineChk.addEventListener('change', ()=>{
+            drawMeshCanvas(cv, state.mesh, true);
+            if(meshLineChk.checked) drawMeshWireframe(cv, state.mesh, cv._hoverData.tf);
+          });
+          meshLineLabel.appendChild(meshLineChk);
+          meshLineLabel.appendChild(document.createTextNode('แสดงเส้นเมชทับ contour'));
+          main.appendChild(meshLineLabel);
       }
+
+      // --- Export the current result ---
+      const exportRow = document.createElement('div'); exportRow.className='actions'; exportRow.style.marginTop='10px';
+      const pngBtn = document.createElement('button'); pngBtn.className='secondary'; pngBtn.textContent='⬇ ภาพผลลัพธ์ (PNG)';
+      pngBtn.onclick = ()=> downloadCanvasPNG(cv, 'femfed-result.png');
+      const csvBtn = document.createElement('button'); csvBtn.className='secondary'; csvBtn.textContent='⬇ ข้อมูลผลลัพธ์ (CSV)';
+      csvBtn.onclick = ()=>{
+        const T = state.results.T;
+        const rows = state.mesh.nodes.map((nd,i)=> state.dimension==='1d' ? [nd.x, T[i]] : [nd.x, nd.y, T[i]]);
+        const header = state.dimension==='1d' ? ['x_m','T_C'] : ['x_m','y_m','T_C'];
+        downloadCSV('femfed-result.csv', header, rows);
+      };
+      exportRow.appendChild(pngBtn); exportRow.appendChild(csvBtn);
+      main.appendChild(exportRow);
 
       // --- Exact solution comparison panel ---
       const exact = state.results.exact;

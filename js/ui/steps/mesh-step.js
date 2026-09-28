@@ -143,15 +143,23 @@ import { renderAll } from '../layout.js';
    genBtn.style.marginBottom='14px';
    genBtn.onclick = ()=>{
       errDiv.style.display='none';
-      try{
-        generateMesh();
-        state.results = null;
-      } catch(e){
-        errDiv.textContent = 'สร้างเมชไม่สำเร็จ: ' + e.message;
-        errDiv.style.display='block';
-        state.mesh = null;
-      }
-      renderAll();
+      genBtn.disabled = true;
+      genBtn.textContent = 'กำลังสร้างเมช...';
+      // Same "let the browser paint first" trick as the Solve button in
+      // solve-step.js — meshing a fine polygon is synchronous and can
+      // take a moment, so this at least shows the button react before
+      // the (still blocking) work runs.
+      setTimeout(()=>{
+        try{
+          generateMesh();
+          state.results = null;
+        } catch(e){
+          errDiv.textContent = 'สร้างเมชไม่สำเร็จ: ' + e.message;
+          errDiv.style.display='block';
+          state.mesh = null;
+        }
+        renderAll();
+      }, 20);
    };
    main.appendChild(genBtn);
    main.appendChild(errDiv);
