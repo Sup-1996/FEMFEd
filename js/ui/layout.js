@@ -2,6 +2,7 @@ import { state, STEPS } from '../state.js';
 import { renderNav } from './nav.js';
 import { renderInfo } from './info-panel.js';
 import { stopPlayback } from './playback.js';
+import { hideTip } from '../render/hover-tip.js';
 import { renderEquationStep } from './steps/equation-step.js';
 import { renderGeometryStep } from './steps/geometry-step.js';
 import { renderMaterialStep } from './steps/material-step.js';
@@ -39,6 +40,7 @@ export function renderAll(){
 
 export function renderMain(){
   stopPlayback();
+  hideTip(); // in case the user navigates away mid-hover on a result canvas
   const main = document.getElementById('mainPanel');
   const prevScroll = main.scrollTop;
   main.innerHTML = '';
