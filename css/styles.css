@@ -332,6 +332,27 @@ input[type=number]{ -moz-appearance:textfield; appearance:textfield; }
 canvas{ background:var(--panel); border:1px solid var(--border-strong); border-radius:var(--radius); display:block; max-width:100%; height:auto; }
 .canvas-wrap{ margin-top:8px; max-width:100%; overflow-x:auto; }
 
+/* ---- BC step: keeps the shape preview visible while scrolling through
+   a long edge table (see bc-step.js) — a standard top-anchored sticky
+   use (stays pinned once scrolled to, unlike a bottom-anchored sticky
+   footer, which has its own gotchas — see the .actions-bar comment
+   above). Its own small background/border/shadow keeps it legible
+   sitting on top of table rows scrolling underneath it. */
+.bc-preview-sticky{
+  position:sticky;
+  top:8px;
+  z-index:3;
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:10px 12px 12px 12px;
+  margin-bottom:14px;
+  box-shadow:var(--shadow-sm);
+  width:max-content;
+  max-width:100%;
+}
+.bc-preview-sticky .canvas-wrap{ margin-top:0; }
+
 .bc-table{ width:100%; border-collapse:collapse; font-size:14.5px; margin-bottom:4px; }
 .bc-table th, .bc-table td{ text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); }
 .bc-table th{ color:var(--ink-soft); font-weight:600; font-size:12.5px; text-transform:none; }
@@ -382,9 +403,9 @@ aside.info{
   border-left:1px solid var(--border);
 }
 aside.info h2{ font-size:13px; text-transform:none; margin:0 0 12px 0; color:var(--ink-soft); font-weight:700; letter-spacing:0.2px;}
-.stat-line{ display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px dashed var(--border-strong); font-family:var(--mono); font-size:13.5px; }
-.stat-line span:first-child{ color:var(--ink-soft); font-family:var(--sans); }
-.stat-line span:last-child{ text-align:right; }
+.stat-line{ display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px dashed var(--border-strong); font-family:var(--sans); font-size:13.5px; }
+.stat-line span:first-child{ color:var(--ink-soft); }
+.stat-line span:last-child{ text-align:right; font-weight:600; }
 .note{ margin-top:16px; padding:11px 13px; border-radius:var(--radius-sm); background:var(--peach-tint); border-left:3px solid var(--peach); font-size:13.5px; color:var(--peach-deep); }
 .error{ margin-top:14px; padding:11px 13px; border-radius:var(--radius-sm); background:var(--danger-tint); border-left:3px solid var(--danger); font-size:14px; color:var(--danger); display:none; }
 
@@ -515,6 +536,9 @@ aside.info h2{ font-size:13px; text-transform:none; margin:0 0 12px 0; color:var
     box-shadow:0 -2px 12px rgba(19,38,34,0.08);
   }
   aside.info{ border-left:none; border-top:1px solid var(--border); }
+  /* the page (not main) scrolls here and the step rail is already sticky
+     at the top, so a second pinned box would just fight it for space */
+  .bc-preview-sticky{ position:static; }
 }
 @media (max-width:520px){
   header{ padding:14px 16px; }
