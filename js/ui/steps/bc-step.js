@@ -21,6 +21,14 @@ import { renderAll } from '../layout.js';
  * editing a value doesn't reset your scroll position or redraw the
  * whole step.
  *
+ * The shape preview sits directly above the edge table (not after it,
+ * and not after the applied-BC summary) and stays sticky to the top of
+ * the scroll area (.bc-preview-sticky, in styles.css) — with many edges
+ * the table can run well past one screenful, and the previous layout
+ * (preview canvas below the whole table) meant it scrolled out of view
+ * exactly while you were filling in the rows that needed it most. The
+ * applied-BC summary now comes last, right before the nav buttons.
+ *
  * highlightPreview() is a module-internal helper (used by the edge-name
  * table's mouseenter/mouseleave handlers) - not exported.
  */
@@ -94,6 +102,34 @@ import { renderAll } from '../layout.js';
       const noteEq = document.createElement('div'); noteEq.className='eq-note';
       noteEq.innerHTML = `<b>n</b> คือทิศทางตั้งฉากกับขอบ (normal direction), ${bar('T')} คืออุณหภูมิที่กำหนด, ${bar('q')} คือฟลักซ์ความร้อนที่กำหนด (ค่าบวก = ความร้อนไหลเข้าสู่โมเดล), <b>h</b> คือสัมประสิทธิ์การพาความร้อน (convective heat transfer coefficient), <b>T∞</b> คืออุณหภูมิของของไหลโดยรอบ (ambient/fluid temperature)`;
       eqBody.appendChild(noteEq);
+
+      // --- Shape preview: right above the table, sticky while scrolling
+      // through it, so it stays visible no matter how many edges the
+      // shape has (see file header). Wrapped together with the table in
+      // one parent so the sticky preview's range is bound to exactly
+      // "while the table is scrolling by" — without that shared wrapper,
+      // a sticky element has no natural place to stop and stays pinned
+      // for the rest of the step's scroll, covering later content
+      // (setHint/note/summary) instead of un-sticking once the table ends.
+      const tableWrap = document.createElement('div');
+
+      const previewBox = document.createElement('div'); previewBox.className='bc-preview-sticky';
+      const previewCap = document.createElement('div'); previewCap.className='unit'; previewCap.style.marginBottom='6px';
+      previewCap.textContent = 'ชี้เมาส์ที่ชื่อขอบในตารางด้านล่างเพื่อไฮไลต์ตำแหน่งบนรูป';
+      previewBox.appendChild(previewCap);
+      const wrap = document.createElement('div'); wrap.className='canvas-wrap'; wrap.style.marginTop='0';
+      let cv;
+      if(state.dimension==='1d'){
+        cv = document.createElement('canvas'); sizeCanvas(cv, 340, 100); cv.id='bcCanvas';
+        wrap.appendChild(cv);
+        draw1DDomain(cv, state.geom.length);
+      } else {
+        cv = document.createElement('canvas'); sizeCanvas(cv, 300, 190); cv.id='bcCanvas';
+        wrap.appendChild(cv);
+        drawPreviewShape(cv);
+      }
+      previewBox.appendChild(wrap);
+      tableWrap.appendChild(previewBox);
 
       const labels = edgeLabels();
       const edgeNames = getEdgeNamesForShape();
@@ -170,31 +206,19 @@ import { renderAll } from '../layout.js';
           tbody.appendChild(tr);
       });
       table.appendChild(tbody);
-      main.appendChild(table);
+      tableWrap.appendChild(table);
+      main.appendChild(tableWrap);
       const setHint = document.createElement('div'); setHint.className='eq-note';
       setHint.textContent = 'ค่าจะถูกบันทึกทันทีที่พิมพ์ — กล่องสรุปด้านล่างอัปเดตให้อัตโนมัติ';
       main.appendChild(setHint);
 
-      const appliedWrap = document.createElement('div'); appliedWrap.style.margin='14px 0';
-      main.appendChild(appliedWrap);
-
-      const wrap = document.createElement('div'); wrap.className='canvas-wrap';
-      let cv;
-      if(state.dimension==='1d'){
-        cv = document.createElement('canvas'); sizeCanvas(cv, 520, 140); cv.id='bcCanvas';
-        wrap.appendChild(cv);
-        main.appendChild(wrap);
-        draw1DDomain(cv, state.geom.length);
-      } else {
-        cv = document.createElement('canvas'); sizeCanvas(cv, 460, 300); cv.id='bcCanvas';
-        wrap.appendChild(cv);
-        main.appendChild(wrap);
-        drawPreviewShape(cv);
-      }
-
       const note = document.createElement('div'); note.className='note';
       note.textContent = 'ต้องกำหนด Fixed temperature หรือ Convective อย่างน้อย 1 ขอบ ก่อนตีเมชและรันการจำลอง มิฉะนั้นระบบสมการจะไม่มีคำตอบที่แน่นอน';
       main.appendChild(note);
+
+      // --- Applied-BC summary: last section before the nav buttons ---
+      const appliedWrap = document.createElement('div'); appliedWrap.style.margin='14px 0';
+      main.appendChild(appliedWrap);
 
       const { nextBtn } = navButtons(main, { back:true, next:true, nextLabel:'ไปหน้าตีเมช →', onNext:()=>{ state.step=4; renderAll(); } });
 
