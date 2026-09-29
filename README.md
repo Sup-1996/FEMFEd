@@ -20,7 +20,36 @@ npx serve .
 Then open the printed `localhost` URL. That's the only "build step" — there
 isn't one otherwise.
 
-## Package 3 — results-page tools (this round)
+## Fixes after hands-on use (post-Package 3)
+
+Two issues found by actually using the app; no new files, two edited
+(`js/ui/steps/bc-step.js`, `css/styles.css`).
+
+**BC step layout with many edges.** For a shape with many edges the edge
+table runs past one screen, and the shape preview used to sit *below*
+the whole table, so it was out of sight exactly while filling in the
+rows that need it. Now the shape preview sits directly above the edge
+table and stays pinned to the top of the scroll area while you scroll
+through the table (hover an edge name to highlight it on the shape, as
+before); the applied-BC summary moved to the very end, just before the
+Back/Next buttons. Details worth knowing:
+- The preview is pinned with `position:sticky`, and it shares a wrapper
+  with the table so it un-pins when the table ends. Without that shared
+  wrapper a sticky element has nowhere to stop and stays pinned over
+  everything that follows — my first attempt did exactly that.
+- The pinned canvas is deliberately compact (300×190 in 2D) since while
+  it's pinned it covers whatever table rows are scrolling underneath;
+  every row is still reachable by scrolling it below the preview.
+- On narrow screens (≤880px) the page itself scrolls and the step rail
+  is already pinned, so the preview is a normal in-flow block there.
+
+**Fonts in the "สรุปโมเดล" panel.** Labels were the app sans and values
+were a monospace stack with no Thai glyphs, so Thai values
+(e.g. "สี่เหลี่ยม", "วาดเอง") fell back to a different face. Both sides
+now use the app font; values are semibold to keep them distinguishable
+from the labels.
+
+## Package 3 — results-page tools
 
 Scope: the "D" (results page) items from the standing proposal, minus
 the ones you opted out of (save/load a model as JSON, colorblind-safe
