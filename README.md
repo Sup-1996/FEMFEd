@@ -20,6 +20,70 @@ npx serve .
 Then open the printed `localhost` URL. That's the only "build step" — there
 isn't one otherwise.
 
+## Polygon mesh quality (post-Package 3)
+
+Polygon meshes used to be built by ear-clipping the outline and then
+subdividing every triangle into 4, again and again. That gives no control
+over triangle shape — the T-shaped model in the report had a minimum
+angle of 8° and a fan of long slivers — and the element count could only
+move in steps of ×4 (a "500 element" request gave 384, or 128 for a
+trapezoid). It also left `drawOutline()` drawing only the first polygon
+edge for these meshes.
+
+**New mesher** (`js/mesh/delaunay-refine.js`, no dependencies):
+1. Each polygon edge is split into roughly equal pieces of length ≈ h.
+2. A Delaunay triangulation is built (incremental Bowyer–Watson).
+3. Ruppert refinement: a boundary segment is split when another node
+   falls inside its diametral circle (this is what guarantees every
+   boundary segment ends up an edge of the mesh, so no separate
+   edge-recovery step is needed); a triangle inside the polygon gets its
+   circumcenter inserted when it is too large or too skinny
+   (circumradius/shortest-edge > 1.414, ≈ 20.7° minimum angle). If that
+   circumcenter would encroach a segment or lie outside the polygon,
+   the segment is split instead.
+4. Triangles outside the polygon are dropped and interior nodes get eight
+   passes of Laplacian smoothing (a move is kept only if no triangle
+   flips and the worst angle around that node doesn't get worse).
+5. The result is validated (boundary segments present, triangle areas
+   sum to the polygon's area). If validation fails, or anything throws,
+   `polygon-mesh.js` falls back to the old ear-clip + subdivide method —
+   valid, but with the old quality.
+
+**Element count:** "จำนวน Element สูงสุด" is still a cap, but h is now
+tuned over a few runs so the mesh lands close under it (e.g. 484 for a
+500 request on the T shape) instead of jumping in ×4 steps.
+
+**Mesh step summary** now also shows the minimum angle and the average
+per-element minimum angle (an equilateral triangle scores 60°).
+
+Measured on the four template shapes at a 500-element request
+(min angle, old → new): L 18.4° → 30.2°, T 8.1° → 30.0°, triangle
+58.0° → 31.0°, trapezoid 29.7° → 36.0°. The triangle is the one
+case that got *worse*: the old method just cut it into 256 copies
+similar to the original (angles 58°/58°/64°, already good), so its
+worst angle stayed at 58°, whereas the new mesh uses ~490 elements of
+varying shape (average per-element minimum 49.9° vs 58.0°, worst 31°).
+So for a shape that is already a nice triangle, the old result was
+better in angle terms; the new one reaches the requested element count.
+Angles below ~20° that remain are always at sharp corners of the
+polygon itself (a 3° corner cannot be meshed with larger angles).
+
+**Rectangle and 1D meshes are unchanged** (they were already regular).
+
+**Files:** new `js/mesh/delaunay-refine.js`, `js/mesh/mesh-quality.js`;
+changed `js/mesh/polygon-mesh.js`, `js/render/contour-canvas.js`
+(outline fix), `js/ui/steps/mesh-step.js` (quality figures), `README.md`.
+
+**Verification** (beyond the browser click-through): the solver was run
+on the new polygon meshes against exact solutions — a rectangle drawn as
+a polygon, linear and quadratic, with Dirichlet/Dirichlet, flux/
+Dirichlet and internal-heat-source cases — and matched to ~1e-10 for
+Dirichlet, flux and the quadratic source case (linear elements with a
+source show the expected discretization error, 0.28 °C on a 125 °C
+peak). A 300-polygon random fuzz on the 0.05 m snap grid: 289 meshed by
+the new mesher, 1 fell back to the old one, none unusable; slowest run
+145 ms. At the 5000-element cap a mesh takes about half a second.
+
 ## Fixes after hands-on use (post-Package 3)
 
 Two issues found by actually using the app; no new files, two edited
@@ -237,7 +301,10 @@ femfed/
     ├── mesh/                   ← "given a shape, produce nodes + elements"
     │   ├── line-mesh.js            1D bar mesh (+ its quadratic upgrade)
     │   ├── rectangle-mesh.js       2D regular-grid mesh
-    │   ├── polygon-mesh.js         freeform polygon → triangulated mesh
+    │   ├── polygon-mesh.js         freeform polygon → mesh: isSimplePolygon() and
+    │   │                           the entry point (quality mesher, old one as fallback)
+    │   ├── delaunay-refine.js      the quality polygon mesher (Delaunay + Ruppert)
+    │   ├── mesh-quality.js         min-angle figures shown in the mesh summary
     │   ├── quadratic-mesh.js       2D triangle mesh → 6-node upgrade
     │   ├── mesh-service.js         generateMesh() — picks the right builder above
     │   └── shape-info.js           edge names/labels/bbox from state alone
