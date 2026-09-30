@@ -1,3 +1,25 @@
+import { buildQualityPolygonMesh } from './delaunay-refine.js';
+
+/**
+ * Freeform polygon mesh entry point.
+ *
+ * buildPolygonMesh() first tries the quality mesher in
+ * mesh/delaunay-refine.js (Delaunay + Ruppert refinement: controlled
+ * element size and a ~20 degree minimum-angle target). If that returns
+ * null or throws (its own validation failed — e.g. a degenerate polygon
+ * with a near-zero-length edge), it falls back to the original method
+ * below: ear-clipping followed by repeated 4-way subdivision. The
+ * fallback always produces a valid mesh, but with the sliver triangles
+ * and coarse element-count steps that motivated the new mesher.
+ *
+ * Only {isSimplePolygon} and {buildPolygonMesh} are used outside this
+ * file; the rest ({polygonSignedArea2}, {segmentsIntersect},
+ * {pointInTriangleStrict}, {triangulatePolygonEarClip},
+ * {buildPolygonMeshFallback}) are internal helpers kept un-exported on
+ * purpose.
+ */
+
+  /* ---- Polygon geometry helpers (for the freeform "draw" tool) ---- */
 function polygonSignedArea2(vertices){
     let a=0;
     for(let i=0;i<vertices.length;i++){
@@ -74,6 +96,16 @@ function polygonSignedArea2(vertices){
   }
 
   export function buildPolygonMesh(vertices, maxElements){
+    try{
+      const mesh = buildQualityPolygonMesh(vertices, maxElements);
+      if(mesh) return mesh;
+    } catch(e){
+      console.warn('quality polygon mesher failed, using the fallback mesher:', e);
+    }
+    return buildPolygonMeshFallback(vertices, maxElements);
+  }
+
+  function buildPolygonMeshFallback(vertices, maxElements){
     const n = vertices.length;
     const baseTriangles = triangulatePolygonEarClip(vertices);
     const baseCount = baseTriangles.length;
