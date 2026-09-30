@@ -6,6 +6,7 @@ import { draw1DMesh } from '../../render/domain-1d-canvas.js';
 import { drawMeshCanvas } from '../../render/contour-canvas.js';
 import { sizeCanvas } from '../../render/hidpi.js';
 import { generateMesh } from '../../mesh/mesh-service.js';
+import { meshQuality } from '../../mesh/mesh-quality.js';
 import { renderAll } from '../layout.js';
 
 /**
@@ -165,11 +166,15 @@ import { renderAll } from '../layout.js';
    main.appendChild(errDiv);
 
    if(state.mesh){
+     const q = meshQuality(state.mesh);
+     const qualityCols = q ? `
+         <div><div class="unit">มุมเล็กสุด (min angle)</div><div style="font-size:20px; font-weight:700; color:var(--mint-deep);">${q.minAngle.toFixed(1)}°</div></div>
+         <div><div class="unit">มุมเล็กสุดเฉลี่ย</div><div style="font-size:20px; font-weight:700; color:var(--mint-deep);">${q.meanMinAngle.toFixed(1)}°</div></div>` : '';
      const summary = document.createElement('div'); summary.className='eq-block'; summary.style.background='#fff'; summary.style.borderColor='var(--border-strong)';
      summary.innerHTML = `<div class="eq-caption" style="margin-bottom:10px;">สรุปข้อมูลเมช (${state.elementOrder==='linear'?'first order':'second order'})</div>
-       <div style="display:flex; gap:32px; font-family:var(--mono);">
+       <div style="display:flex; gap:32px; flex-wrap:wrap; font-family:var(--mono);">
          <div><div class="unit">จำนวน Element</div><div style="font-size:20px; font-weight:700; color:var(--mint-deep);">${state.mesh.elements.length}</div></div>
-         <div><div class="unit">จำนวน Node</div><div style="font-size:20px; font-weight:700; color:var(--mint-deep);">${state.mesh.nodes.length}</div></div>
+         <div><div class="unit">จำนวน Node</div><div style="font-size:20px; font-weight:700; color:var(--mint-deep);">${state.mesh.nodes.length}</div></div>${qualityCols}
             </div>`;
           main.appendChild(summary);
 
