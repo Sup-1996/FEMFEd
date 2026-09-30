@@ -169,6 +169,15 @@ import { showTip, hideTip } from './hover-tip.js';
     } else if(mesh.boundaries.base){
       const {base, hyp, side} = mesh.boundaries;
       loop = [...base, ...hyp.slice(1), ...[...side].reverse().slice(1)];
+    } else if(Object.keys(mesh.boundaries).every(k=>/^edge\d+$/.test(k))){
+      // freeform polygon: one node chain per edge (edge0, edge1, ...), each
+      // starting where the previous one ended — concatenate them in order.
+      // (This used to fall through to the branch below and draw only edge0.)
+      const keys = Object.keys(mesh.boundaries).sort((a,b)=>parseInt(a.slice(4))-parseInt(b.slice(4)));
+      keys.forEach((k,i)=>{
+        const chain = mesh.boundaries[k];
+        loop.push(...(i===0 ? chain : chain.slice(1)));
+      });
     } else {
       // single continuous boundary loop (e.g. circle) — already closed
       loop = mesh.boundaries[Object.keys(mesh.boundaries)[0]];
