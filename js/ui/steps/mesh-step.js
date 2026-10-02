@@ -7,6 +7,7 @@ import { drawMeshCanvas } from '../../render/contour-canvas.js';
 import { sizeCanvas } from '../../render/hidpi.js';
 import { generateMesh } from '../../mesh/mesh-service.js';
 import { meshQuality } from '../../mesh/mesh-quality.js';
+import { maxElementsCap } from '../../mesh/structural-info.js';
 import { renderAll } from '../layout.js';
 
 /**
@@ -16,6 +17,8 @@ import { renderAll } from '../layout.js';
  */
 
   export function renderMeshStep(main){
+    const isStruct = state.equation==='structure';
+    const cap = maxElementsCap();
     const meshDesc = state.dimension==='1d'
       ? 'กำหนดระดับของเอลิเมนต์และความละเอียดของเมช ระบบจะแบ่งเส้นออกเป็นเอลิเมนต์แท่ง (bar    element) โดยอัตโนมัติ'
       : 'กำหนดระดับของเอลิเมนต์และความละเอียดของเมช ระบบจะสร้างเมชรูปสามเหลี่ยมโดยอัตโนมัติ';
@@ -62,7 +65,24 @@ import { renderAll } from '../layout.js';
 
   // --- Shape function interpolation (depends on order & dimension) — the
   // core concept for this step, so it stays open by default. ---
-  if(state.dimension==='1d'){
+  if(isStruct){
+    // Structural: the unknown is the displacement field, not temperature
+    if(state.dimension==='1d'){
+      const n = state.elementOrder==='linear' ? 2 : 3;
+      const terms = Array.from({length:n},(_,i)=>`N<sub>${i+1}</sub>u<sub>${i+1}</sub>`).join(` ${rm('+')} `);
+      eqBlock(main, 'การประมาณค่าการเคลื่อนที่ภายในแต่ละเอลิเมนต์', `u${rm('(')}x${rm(')')} ${rm('≈')} ${terms}`,
+        n===2 ? 'เอลิเมนต์แท่ง 2 โหนด ประมาณการเคลื่อนที่แบบเชิงเส้นระหว่างสองปลาย (ความเครียดคงที่ในเอลิเมนต์)'
+              : 'เอลิเมนต์แท่ง 3 โหนด ประมาณการเคลื่อนที่แบบพาราโบลา (ความเครียดเปลี่ยนแปลงเชิงเส้นในเอลิเมนต์) แม่นยำกว่าเมื่อใช้จำนวนเอลิเมนต์เท่ากัน');
+    } else if(state.elementOrder==='linear'){
+      eqBlock(main, 'การประมาณค่าการเคลื่อนที่ภายในแต่ละเอลิเมนต์ (shape function interpolation)',
+        `u${rm('(')}x,y${rm(')')} ${rm('≈')} ${rm('Σ')}<sub>i=1</sub><sup>3</sup> N<sub>i</sub>u<sub>i</sub> ${rm(',')} v${rm('(')}x,y${rm(')')} ${rm('≈')} ${rm('Σ')}<sub>i=1</sub><sup>3</sup> N<sub>i</sub>v<sub>i</sub>`,
+        'เอลิเมนต์สามเหลี่ยม 3 โหนด (CST, constant strain triangle) แต่ละโหนดมี 2 องศาอิสระ (u, v) — การเคลื่อนที่เป็นเชิงเส้น ความเครียดและความเค้นจึง<b>คงที่</b>ในแต่ละเอลิเมนต์ ต้องใช้เมชละเอียดจึงจะได้ผลดีโดยเฉพาะกรณีดัด');
+    } else {
+      eqBlock(main, 'การประมาณค่าการเคลื่อนที่ภายในแต่ละเอลิเมนต์ (shape function interpolation)',
+        `u${rm('(')}x,y${rm(')')} ${rm('≈')} ${rm('Σ')}<sub>i=1</sub><sup>6</sup> N<sub>i</sub>u<sub>i</sub> ${rm(',')} v${rm('(')}x,y${rm(')')} ${rm('≈')} ${rm('Σ')}<sub>i=1</sub><sup>6</sup> N<sub>i</sub>v<sub>i</sub>`,
+        'เอลิเมนต์สามเหลี่ยม 6 โหนด (LST, linear strain triangle) แต่ละโหนดมี 2 องศาอิสระ — การเคลื่อนที่เป็นพาราโบลา ความเครียดเปลี่ยนแปลงเชิงเส้นในเอลิเมนต์ ให้ความแม่นยำสูงกว่า CST มาก โดยเฉพาะปัญหาการดัด');
+    }
+  } else if(state.dimension==='1d'){
     if(state.elementOrder==='linear'){
       eqBlock(main, 'การประมาณค่าอุณหภูมิภายในแต่ละเอลิเมนต์',
         `T${rm('(')}x${rm(')')} ${rm('≈')} N<sub>1</sub>T<sub>1</sub> ${rm('+')} N<sub>2</sub>T<sub>2</sub>`,
@@ -98,8 +118,11 @@ import { renderAll } from '../layout.js';
 
     // --- Brief discretized elemental equation --- (a summary aside, starts collapsed)
     eqBlock(main, 'สมการเอลิเมนต์ที่ได้จากการ discretize (โดยสังเขป)',
-       `${rm('[')}k<sub>e</sub>${rm(']{')}T<sub>e</sub>${rm('} = {')}F<sub>e</sub>${rm('}')}`,
-  `เมทริกซ์ [k<sub>e</sub>] และเวกเตอร์ {F<sub>e</sub>} ของแต่ละเอลิเมนต์คำนวณจากอินทิกรัลของ k(∇N<sub>i</sub>·∇N<sub>j</sub>) และ Q·N<sub>i</sub> ตามลำดับ แล้วนำไปประกอบรวม (assemble) เป็นระบบสมการรวมทั้งโมเดลในขั้นตอนถัดไป`,
+       isStruct ? `${rm('[')}k<sub>e</sub>${rm(']{')}u<sub>e</sub>${rm('} = {')}F<sub>e</sub>${rm('}')}` : `${rm('[')}k<sub>e</sub>${rm(']{')}T<sub>e</sub>${rm('} = {')}F<sub>e</sub>${rm('}')}`,
+  isStruct ? (state.dimension==='1d'
+     ? `เมทริกซ์ [k<sub>e</sub>] คำนวณจากอินทิกรัลของ EA·(dN<sub>i</sub>/dx)(dN<sub>j</sub>/dx) (linear: EA/L · [[1, −1], [−1, 1]]) แล้วนำไปประกอบรวม (assemble) เป็นระบบสมการรวมของทั้งแท่งในขั้นตอนถัดไป`
+     : `เมทริกซ์ [k<sub>e</sub>] = ∫ [B]<sup>T</sup>[D][B] t dA โดย [B] คือเมทริกซ์ที่เปลี่ยนการเคลื่อนที่ที่โหนดเป็นความเครียด ส่วน {F<sub>e</sub>} มาจากแรงที่ขอบและแรงจุด แล้วนำไปประกอบรวม (assemble) เป็นระบบสมการรวมทั้งโมเดลในขั้นตอนถัดไป`)
+   : `เมทริกซ์ [k<sub>e</sub>] และเวกเตอร์ {F<sub>e</sub>} ของแต่ละเอลิเมนต์คำนวณจากอินทิกรัลของ k(∇N<sub>i</sub>·∇N<sub>j</sub>) และ Q·N<sub>i</sub> ตามลำดับ แล้วนำไปประกอบรวม (assemble) เป็นระบบสมการรวมทั้งโมเดลในขั้นตอนถัดไป`,
    {open:false}
    );
 
@@ -108,13 +131,14 @@ import { renderAll } from '../layout.js';
    // field, it doesn't generate the mesh by itself. ---
    const presets = state.dimension==='1d'
      ? [['หยาบ',20],['กลาง',100],['ละเอียด',500]]
-     : [['หยาบ',60],['กลาง',500],['ละเอียด',2000]];
+     : (isStruct ? [['หยาบ',60],['กลาง',400],['ละเอียด',1200]] : [['หยาบ',60],['กลาง',500],['ละเอียด',2000]]);
+   if(state.maxElements>cap) state.maxElements = cap;
    const presetRow = document.createElement('div'); presetRow.className='shape-choice'; presetRow.style.marginBottom='6px';
    const presetBtns = [];
    const row = document.createElement('div'); row.className='field-row';
    const f = document.createElement('div'); f.className='field'; f.style.minWidth='220px';
    f.innerHTML = `<label>จำนวน Element สูงสุด (max elements)</label>`;
-   const numInp = document.createElement('input'); numInp.type='number'; numInp.min='1'; numInp.max='5000'; numInp.step='1'; numInp.value=state.maxElements;
+   const numInp = document.createElement('input'); numInp.type='number'; numInp.min='1'; numInp.max=String(cap); numInp.step='1'; numInp.value=state.maxElements;
    function syncPresetHighlight(){
      presetBtns.forEach(({btn,val})=>{ btn.classList.toggle('sel', state.maxElements===val); });
    }
@@ -128,11 +152,11 @@ import { renderAll } from '../layout.js';
    main.appendChild(presetRow);
    numInp.addEventListener('input', ()=>{
      const v = parseInt(numInp.value);
-     if(!isNaN(v)){ state.maxElements = Math.max(1, Math.min(5000, v)); syncPresetHighlight(); }
+     if(!isNaN(v)){ state.maxElements = Math.max(1, Math.min(cap, v)); syncPresetHighlight(); }
    });
    numInp.addEventListener('blur', ()=>{ numInp.value = state.maxElements; });
    f.appendChild(numInp);
-   const u = document.createElement('span'); u.className='unit'; u.textContent='element (ไม่เกิน 5,000)';
+   const u = document.createElement('span'); u.className='unit'; u.textContent=`element (ไม่เกิน ${cap.toLocaleString()})`;
    f.appendChild(u);
    row.appendChild(f);
    main.appendChild(row);

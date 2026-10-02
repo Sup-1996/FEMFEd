@@ -9,6 +9,12 @@ import {
 } from '../../render/equation-markup.js';
 import { generateMesh } from '../../mesh/mesh-service.js';
 import { solveHeatConduction } from '../../solver/steady-solver.js';
+import { solveStructural } from '../../solver/structural-solver.js';
+import { ensureStructuralDefaults } from '../../mesh/structural-info.js';
+import {
+  STRUCT_EQ_EQUILIBRIUM, STRUCT_EQ_PLANE_X, STRUCT_EQ_PLANE_Y,
+  STRUCT_EQ_CONSTITUTIVE, STRUCT_EQ_KINEMATIC, STRUCT_EQ_BAR,
+} from '../../render/structural-markup.js';
 import { renderAll } from '../layout.js';
 
 /**
@@ -55,59 +61,139 @@ import { renderAll } from '../layout.js';
     }},
   ];
 
+  // Structural presets: each sets geometry, material, supports and loads (SI),
+  // meshes, solves and jumps to the results step, like the heat presets above.
+  function structuralBase(dim){
+    state.equation='structure'; state.analysisType='steady';
+    state.dimension=dim; state.shape = dim==='1d' ? 'line' : 'rectangle';
+    state.structural.E = 200e9; state.structural.nu = 0.3;
+    state.sbc = {}; state.spl = {};
+    state.sview = { field: dim==='1d' ? 'u' : 'vm', deform:true, scale:null, wire:false };
+  }
+  const STRUCT_PRESETS = [
+    { label:'แท่ง 1D: ดึงตามแกน', build(){
+        structuralBase('1d');
+        state.geom.length = 1; state.structural.area = 1e-4;
+        state.elementOrder='linear'; state.maxElements=20;
+        ensureStructuralDefaults();
+        state.sbc.left.type='fixed'; state.sbc.right.type='load'; state.sbc.right.value=10e3;
+    }},
+    { label:'แผ่น 2D: ดึงสม่ำเสมอ (patch test)', build(){
+        structuralBase('2d');
+        state.structural.mode='plane_stress'; state.structural.thickness=0.01;
+        state.geom.width=1; state.geom.height=0.6;
+        state.elementOrder='linear'; state.maxElements=200;
+        ensureStructuralDefaults();
+        state.sbc.left.type='roller_x'; state.sbc.bottom.type='roller_y';
+        state.sbc.right.type='traction'; state.sbc.right.tx=50e6;
+    }},
+    { label:'คานยื่น: แรงที่ปลาย', build(){
+        structuralBase('2d');
+        state.structural.mode='plane_stress'; state.structural.thickness=0.01;
+        state.geom.width=1; state.geom.height=0.2;
+        state.elementOrder='quadratic'; state.maxElements=400;
+        ensureStructuralDefaults();
+        state.sbc.left.type='fixed';
+        state.sbc.right.type='traction'; state.sbc.right.ty=-1e6;
+    }},
+  ];
+
   function applyPreset(preset){
     preset.build();
+    state.mesh = null; state.results = null;
     generateMesh();
-    try{ solveHeatConduction(); } catch(e){ state.results = null; }
+    try{
+      if(state.equation==='structure') solveStructural(); else solveHeatConduction();
+    } catch(e){ state.results = null; }
     state.step = 5;
     renderAll();
   }
 
   export function renderEquationStep(main){
-    makeTitle(main, 'เลือกสมการที่ใช้จำลอง', 'เวอร์ชันนี้รองรับการถ่ายเทความร้อน (heat transfer) ทั้งแบบคงตัว (steady-state) และแบบไม่คงตัวตามเวลา (transient)');
+    makeTitle(main, 'เลือกสมการที่ใช้จำลอง', 'เวอร์ชันนี้รองรับการถ่ายเทความร้อน (heat transfer) ทั้งแบบคงตัวและแบบไม่คงตัวตามเวลา และการวิเคราะห์โครงสร้างแบบสถิต (static structural, ยืดหยุ่นเชิงเส้น)');
     const wrap = document.createElement('div'); wrap.className='eq-choice';
     const opts = [
         {id:'heat', label:'Heat Transfer', tag:'พร้อมใช้งาน', enabled:true},
-        {id:'structure', label:'Structural (elastic)', tag:'coming soon', enabled:false},
+        {id:'structure', label:'Structural (elastic)', tag:'static • พร้อมใช้งาน', enabled:true},
     ];
     opts.forEach(o=>{
         const b = document.createElement('button'); b.type='button';
         b.className = 'eq-btn' + (state.equation===o.id?' sel':'') + (!o.enabled?' disabled':'');
         b.innerHTML = `${o.label}<span class="tag">${o.tag}</span>`;
         b.disabled = !o.enabled;
-        if(o.enabled) b.onclick = ()=>{ state.equation=o.id; renderAll(); };
+        if(o.enabled) b.onclick = ()=>{
+          if(state.equation!==o.id){
+            // physics changed: the mesh can stay (a mesh is a mesh), but the old result cannot
+            state.equation=o.id; state.results=null; state.analysisType='steady';
+          }
+          renderAll();
+        };
         wrap.appendChild(b);
     });
     main.appendChild(wrap);
 
-    const wrap2 = document.createElement('div'); wrap2.className='eq-choice';
-    const opts2 = [
-       {id:'steady', label:'Steady state', enabled:true},
-       {id:'transient', label:'Time-dependent (transient)', enabled:true},
-    ];
-    opts2.forEach(o=>{
-       const b = document.createElement('button'); b.type='button';
-       b.className = 'eq-btn' + (state.analysisType===o.id?' sel':'') + (!o.enabled?' disabled':'');
-       b.innerHTML = `${o.label}${!o.enabled?'<span class="tag">coming soon</span>':''}`;
-       b.disabled = !o.enabled;
-       if(o.enabled) b.onclick = ()=>{ state.analysisType=o.id; state.results=null; renderAll(); };
-       wrap2.appendChild(b);
+    const isStruct = state.equation==='structure';
+    if(!isStruct){
+      const wrap2 = document.createElement('div'); wrap2.className='eq-choice';
+      const opts2 = [
+         {id:'steady', label:'Steady state', enabled:true},
+         {id:'transient', label:'Time-dependent (transient)', enabled:true},
+      ];
+      opts2.forEach(o=>{
+         const b = document.createElement('button'); b.type='button';
+         b.className = 'eq-btn' + (state.analysisType===o.id?' sel':'') + (!o.enabled?' disabled':'');
+         b.innerHTML = `${o.label}${!o.enabled?'<span class="tag">coming soon</span>':''}`;
+         b.disabled = !o.enabled;
+         if(o.enabled) b.onclick = ()=>{ state.analysisType=o.id; state.results=null; renderAll(); };
+         wrap2.appendChild(b);
       });
       main.appendChild(wrap2);
+    } else {
+      const wrap2 = document.createElement('div'); wrap2.className='eq-choice';
+      const b = document.createElement('button'); b.type='button'; b.className='eq-btn sel';
+      b.innerHTML = 'Static (สถิต)<span class="tag">โหลดคงที่ ไม่คิดผลตามเวลา/ความเฉื่อย</span>';
+      wrap2.appendChild(b);
+      const b2 = document.createElement('button'); b2.type='button'; b2.className='eq-btn disabled'; b2.disabled = true;
+      b2.innerHTML = 'Dynamic<span class="tag">ยังไม่รองรับ</span>';
+      wrap2.appendChild(b2);
+      main.appendChild(wrap2);
+    }
 
-      const presetBox = document.createElement('div'); presetBox.className='eq-block'; presetBox.style.background='var(--peach-tint)'; presetBox.style.borderColor='#EFDDB2';
-      const presetCap = document.createElement('div'); presetCap.className='eq-caption'; presetCap.textContent='หรือเริ่มจากตัวอย่างสำเร็จรูป (ตั้งค่าและแก้ปัญหาให้ทันที แล้วข้ามไปดูผลลัพธ์)';
-      presetBox.appendChild(presetCap);
-      const presetRow = document.createElement('div'); presetRow.style.display='flex'; presetRow.style.gap='10px'; presetRow.style.flexWrap='wrap';
-      PRESETS.forEach(preset=>{
-        const b = document.createElement('button'); b.type='button'; b.className='secondary';
-        b.textContent = preset.label;
-        b.onclick = ()=> applyPreset(preset);
-        presetRow.appendChild(b);
-      });
-      presetBox.appendChild(presetRow);
-      main.appendChild(presetBox);
+    const presetBox = document.createElement('div'); presetBox.className='eq-block'; presetBox.style.background='var(--peach-tint)'; presetBox.style.borderColor='#EFDDB2';
+    const presetCap = document.createElement('div'); presetCap.className='eq-caption'; presetCap.textContent='หรือเริ่มจากตัวอย่างสำเร็จรูป (ตั้งค่าและแก้ปัญหาให้ทันที แล้วข้ามไปดูผลลัพธ์)';
+    presetBox.appendChild(presetCap);
+    const presetRow = document.createElement('div'); presetRow.style.display='flex'; presetRow.style.gap='10px'; presetRow.style.flexWrap='wrap';
+    (isStruct ? STRUCT_PRESETS : PRESETS).forEach(preset=>{
+      const b = document.createElement('button'); b.type='button'; b.className='secondary';
+      b.textContent = preset.label;
+      b.onclick = ()=> applyPreset(preset);
+      presetRow.appendChild(b);
+    });
+    presetBox.appendChild(presetRow);
+    main.appendChild(presetBox);
 
+    if(isStruct){
+      const body = eqBlock(main, 'Governing equation (static equilibrium, linear elasticity)',
+        STRUCT_EQ_EQUILIBRIUM,
+        `เมื่อ <b>σ</b> คือเทนเซอร์ความเค้น (stress) และ <b>b</b> คือแรงต่อหน่วยปริมาตร (body force, เช่น น้ำหนักตัวเอง — ในเวอร์ชันนี้ตั้งเป็น 0)<br>
+         สำหรับปัญหา 2 มิติ (plane stress / plane strain) เขียนแยกตามแกนได้เป็น:`);
+      const e1 = document.createElement('div'); e1.className='equation'; e1.style.marginTop='6px'; e1.innerHTML = STRUCT_EQ_PLANE_X; body.appendChild(e1);
+      const e2 = document.createElement('div'); e2.className='equation'; e2.style.marginTop='6px'; e2.innerHTML = STRUCT_EQ_PLANE_Y; body.appendChild(e2);
+
+      const body2 = eqBlock(main, 'ความสัมพันธ์เสริม: ความเครียด–การเคลื่อนที่ และกฎของฮุก',
+        STRUCT_EQ_KINEMATIC,
+        'u, v คือการเคลื่อนที่ตามแกน x, y — ความเครียด (strain) หาได้จากอนุพันธ์ของการเคลื่อนที่ ส่วนความเค้นหาได้จากกฎของฮุกในรูปเมทริกซ์:');
+      const e3 = document.createElement('div'); e3.className='equation'; e3.style.marginTop='6px'; e3.innerHTML = STRUCT_EQ_CONSTITUTIVE; body2.appendChild(e3);
+      const n3 = document.createElement('div'); n3.className='eq-note';
+      n3.innerHTML = 'เมทริกซ์ [D] ขึ้นกับ E, ν และสมมติฐาน <b>plane stress</b> (แผ่นบาง σ<sub>z</sub> = 0) หรือ <b>plane strain</b> (ชิ้นงานยาว ε<sub>z</sub> = 0) — เลือกในขั้นตอนคุณสมบัติวัสดุ';
+      body2.appendChild(n3);
+
+      const body3 = eqBlock(main, 'กรณี 1 มิติ: แท่งรับแรงตามแกน (bar)', STRUCT_EQ_BAR,
+        'E คือโมดูลัสของยัง, A คือพื้นที่หน้าตัด, u คือการเคลื่อนที่ตามแกน — เมื่อ EA คงที่และไม่มีแรงกระจาย แท่งจะมี u(x) เป็นเส้นตรง', {open:false});
+      const note = document.createElement('div'); note.className='eq-note';
+      note.textContent = 'ระบบจะแปลงสมการนี้เป็นระบบ [K]{u}={F} ด้วยไฟไนต์เอลิเมนต์ (องศาอิสระ: การเคลื่อนที่ u, v ที่แต่ละโหนด) แล้วแก้หาการเคลื่อนที่และคำนวณความเค้นย้อนกลับ — ใช้หน่วย SI ทั้งหมด (m, Pa, N), วัสดุยืดหยุ่นเชิงเส้น เนื้อเดียวกัน และการเสียรูปน้อย (small deformation)';
+      body3.appendChild(note);
+    } else
       if(state.analysisType==='steady'){
            const body = eqBlock(main, 'Governing equation (steady-state heat conduction)',
                GOVERNING_EQ_GENERAL,

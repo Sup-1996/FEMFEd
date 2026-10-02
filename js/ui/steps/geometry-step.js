@@ -55,7 +55,9 @@ import { renderAll, renderMain } from '../layout.js';
         row.appendChild(numField('ความยาวของเส้น/แท่ง (length)', state.geom.length, 'm', v=>{state.geom.length=v; state.mesh=null; state.results=null;}));
         main.appendChild(row);
         const note = document.createElement('div'); note.className='eq-note';
-                                  note.textContent = 'สมมติพื้นที่หน้าตัด A = 1 m² เพื่อความง่าย (ไม่ส่งผลต่อรูปแบบคำตอบของอุณหภูมิ)';
+                                  note.textContent = state.equation==='structure'
+                                    ? 'พื้นที่หน้าตัด A กำหนดในขั้นตอนคุณสมบัติวัสดุ (ขั้นตอนถัดไป)'
+                                    : 'สมมติพื้นที่หน้าตัด A = 1 m² เพื่อความง่าย (ไม่ส่งผลต่อรูปแบบคำตอบของอุณหภูมิ)';
         main.appendChild(note);
 
          const wrap = document.createElement('div'); wrap.className='canvas-wrap';
@@ -173,7 +175,7 @@ import { renderAll, renderMain } from '../layout.js';
              p.vertices.forEach(v=>{ if(v.x<minX) minX=v.x; if(v.y<minY) minY=v.y; });
              p.vertices = p.vertices.map(v=>({x:v.x-minX, y:v.y-minY}));
              p.finalized = true;
-             state.mesh=null; state.results=null; state.bc={};
+             state.mesh=null; state.results=null; state.bc={}; state.sbc={}; state.spl={};
              renderAll();
           };
           actions.appendChild(undoBtn); actions.appendChild(clearBtn); actions.appendChild(closeBtn);
@@ -202,7 +204,7 @@ import { renderAll, renderMain } from '../layout.js';
           drawPreviewShape(cv);
 
           const redrawBtn = document.createElement('button'); redrawBtn.className='secondary'; redrawBtn.style.marginTop='12px'; redrawBtn.textContent='✎ วาดรูปร่างใหม่';
-          redrawBtn.onclick = ()=>{ state.polygon={vertices:[], finalized:false}; state.mesh=null; state.results=null; state.bc={}; renderAll(); };
+          redrawBtn.onclick = ()=>{ state.polygon={vertices:[], finalized:false}; state.mesh=null; state.results=null; state.bc={}; state.sbc={}; state.spl={}; renderAll(); };
           main.appendChild(redrawBtn);
 
           navButtons(main, { back:true, next:true, onNext:()=>{ state.step=2; renderAll(); } });
