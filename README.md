@@ -68,6 +68,23 @@ mesh-size cap for structural models is 1,500 elements (heat: 5,000).
 Stresses are computed per element, then averaged at shared nodes for the
 contour.
 
+**Animation and single-valued fields (added after first use)** — on the
+2D structural results, a load-factor slider with Play / Pause / Restart
+animates the deformation: the load ramps 0 → 100 % → 0 (cosine ease,
+about 3 s per cycle, looping), and both the deformed shape and the
+field values are scaled by the load factor — exact for linear elasticity,
+where results are proportional to the load — while the colour scale
+stays fixed at the full-load range. Play switches the deformed view on
+if it was off and continues from the slider position. The 1D bar chart
+has no animation (it is a graph, not a shape).
+A field whose spread is negligible (under 1e-5 of the largest value of
+its kind) is treated as **one value**: the contour is painted a single
+flat colour and the colour bar becomes one solid block with one label
+and "ค่าคงที่ทั้งแผ่น", instead of stretching round-off over the whole
+rainbow (the uniform-tension plate has σx = 50 MPa everywhere). Hover
+still reports the value. Files: `js/ui/steps/structural-solve-step.js`,
+`js/render/structural-canvas.js`.
+
 **Measured in Node (no browser):**
 - Bar, linear and quadratic, CG and Direct: tip displacement PL/(EA) to
   ~1e-16 relative; σ = P/A exact.
