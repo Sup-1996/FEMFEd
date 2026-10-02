@@ -12,7 +12,8 @@ import { edgeSegments, cornerPositions } from '../mesh/structural-info.js';
  *
  * - drawStructuralField(): contour of a nodal field (|u|, von Mises, ...)
  *   on the (optionally exaggerated) deformed mesh, with the undeformed
- *   outline dashed behind it. Like contour-canvas.js it works in raw
+ *   outline dashed behind it. Pass o.constant (a number) for a single-valued
+ *   field to get one flat colour instead of a gradient. Like contour-canvas.js it works in raw
  *   device pixels (canvas._dpr scales literal sizes).
  * - attachFieldHover(): mouse readout for that contour, with a caller-
  *   supplied formatter (units differ per field).
@@ -35,7 +36,14 @@ import { edgeSegments, cornerPositions } from '../mesh/structural-info.js';
     ctx.setTransform(1,0,0,1,0,0);
     const W = cv.width, H = cv.height, dpr = cv._dpr || 1;
     ctx.clearRect(0,0,W,H);
-    const { mesh, values, min, max, ux, uy } = o;
+    let { mesh, values, min, max, ux, uy } = o;
+    if(o.constant!==undefined){
+      // Single-valued field: paint one flat colour (middle of the scale) instead of
+      // stretching round-off noise over the whole rainbow. `values` keeps the
+      // true constant so the hover readout still reports it.
+      values = new Float64Array(mesh.nodes.length).fill(o.constant);
+      min = o.constant - 1; max = o.constant + 1;
+    }
     const scale = o.scale || 0;
     const dnodes = mesh.nodes.map((nd,i)=>({ x:nd.x+scale*ux[i], y:nd.y+scale*uy[i] }));
     const dmesh = { nodes:dnodes, elements:mesh.elements, order:mesh.order, boundaries:mesh.boundaries, bbox:mesh.bbox };
