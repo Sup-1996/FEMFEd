@@ -4,10 +4,12 @@ import { eqBlock, rm, frac, vec } from '../../render/equation-markup.js';
 import { solveStructural } from '../../solver/structural-solver.js';
 import { draw1DMesh } from '../../render/domain-1d-canvas.js';
 import { drawMeshCanvas, drawColorbarInto } from '../../render/contour-canvas.js';
+import { rainbowColor } from '../../render/colormap.js';
 import { drawStructuralField, attachFieldHover, drawBarChart, attachBarChartHover } from '../../render/structural-canvas.js';
 import { sizeCanvas } from '../../render/hidpi.js';
 import { downloadCanvasPNG, downloadCSV } from '../export-helpers.js';
 import { fmt, fmtWith, pickLenUnit, pickStressUnit, pickForceUnit } from '../structural-format.js';
+import { isPlaying, startPlayback, stopPlayback } from '../playback.js';
 import { renderAll, renderMain } from '../layout.js';
 
 /**
@@ -150,8 +152,9 @@ import { renderAll, renderMain } from '../layout.js';
       return l;
     }
     const opts = document.createElement('div'); opts.style.marginBottom='8px';
-    opts.appendChild(check('แสดงรูปร่างที่เสียรูป (deformed)', view.deform, v=>{ view.deform=v; syncScaleUi(); redraw(); }));
-    opts.appendChild(check('แสดงเส้นเมชทับ contour', view.wire, v=>{ view.wire=v; redraw(); }));
+    const deformLabel = check('แสดงรูปร่างที่เสียรูป (deformed)', view.deform, v=>{ view.deform=v; syncScaleUi(); drawField(); });
+    opts.appendChild(deformLabel);
+    opts.appendChild(check('แสดงเส้นเมชทับ contour', view.wire, v=>{ view.wire=v; drawField(); }));
     main.appendChild(opts);
 
     const scaleRow = document.createElement('div'); scaleRow.className='field-row'; scaleRow.style.alignItems='flex-end';
@@ -174,9 +177,26 @@ import { renderAll, renderMain } from '../layout.js';
       slider.value = String(Math.max(0, Math.min(300, s/autoScale*100)));
       slider.disabled = autoBtn.disabled = realBtn.disabled = !view.deform;
     }
-    slider.addEventListener('input', ()=>{ view.scale = autoScale*parseFloat(slider.value)/100; syncScaleUi(); redraw(); });
-    autoBtn.onclick = ()=>{ view.scale = null; syncScaleUi(); redraw(); };
-    realBtn.onclick = ()=>{ view.scale = 1; syncScaleUi(); redraw(); };
+    slider.addEventListener('input', ()=>{ view.scale = autoScale*parseFloat(slider.value)/100; syncScaleUi(); drawField(); });
+    autoBtn.onclick = ()=>{ view.scale = null; syncScaleUi(); drawField(); };
+    realBtn.onclick = ()=>{ view.scale = 1; syncScaleUi(); drawField(); };
+
+    // --- load-factor slider (the animation's "time" axis) ---
+    // Linear elasticity: displacements and stresses scale in proportion to
+    // the load, so the animation ramps the load factor f from 0 to 1 and
+    // back; shape and field values are both multiplied by f while the
+    // colour scale stays fixed at the full-load range.
+    let phase = 1; // current load factor, 0..1 (starts at the full-load result)
+    const phRow = document.createElement('div'); phRow.className='field-row'; phRow.style.alignItems='flex-end';
+    const pf = document.createElement('div'); pf.className='field'; pf.style.minWidth='320px';
+    const pLabel = document.createElement('label');
+    const phSlider = document.createElement('input'); phSlider.type='range'; phSlider.min='0'; phSlider.max='100'; phSlider.step='1';
+    pf.appendChild(pLabel); pf.appendChild(phSlider); phRow.appendChild(pf);
+    main.appendChild(phRow);
+    function syncPhaseUi(){
+      pLabel.innerHTML = `ระดับแรงที่กระทำ (load factor): <b>${Math.round(phase*100)} %</b> ของแรงเต็ม`;
+      phSlider.value = String(Math.round(phase*100));
+    }
 
     // --- canvas + colorbar ---
     const wrap = document.createElement('div'); wrap.className='canvas-wrap'; wrap.style.display='flex'; wrap.style.gap='16px'; wrap.style.flexWrap='wrap';
@@ -191,31 +211,122 @@ import { renderAll, renderMain } from '../layout.js';
     const cbCol = document.createElement('div'); cbCol.appendChild(cbTitle); cbCol.appendChild(cbWrap);
     wrap.appendChild(cbCol);
     main.appendChild(wrap);
-    drawColorbarInto(cbCanvas);
 
     let curUnit = {name:'', f:1}, curLabel = '';
     attachFieldHover(cv, v=> `${curLabel} ≈ ${fmt(v/curUnit.f,4)} ${curUnit.name}`);
 
-    function redraw(){
+    /* A field is "constant" when its spread is negligible next to the
+       largest value of its kind (all displacement fields, or all stress
+       fields) — e.g. the uniform-tension plate has sigma_x = 50 MPa
+       everywhere, with only round-off differences between nodes. Without
+       this the colour scale would stretch that round-off over the whole
+       rainbow while every tick label reads the same number. */
+    function constantOf(key){
+      const rng = res.ranges[key];
+      const def = FIELDS.find(f=>f[0]===key);
+      let ref = 0;
+      for(const [k,,kind] of FIELDS) if(kind===def[2]) ref = Math.max(ref, Math.abs(res.ranges[k].min), Math.abs(res.ranges[k].max));
+      if(!(ref>0)) return 0;
+      if(rng.max-rng.min <= 1e-5*ref){
+        let sum=0; const arr = res.fields[key]; for(let i=0;i<arr.length;i++) sum += arr[i];
+        const mean = sum/arr.length;
+        return Math.abs(mean) <= 1e-5*ref ? 0 : mean;
+      }
+      return undefined;
+    }
+
+    // Legend: rebuilt only when the displayed field changes, not per animation frame
+    function updateLegend(){
       const def = FIELDS.find(f=>f[0]===view.field);
-      const vals = res.fields[view.field], rng = res.ranges[view.field];
-      const maxAbs = Math.max(Math.abs(rng.min), Math.abs(rng.max));
+      const rng = res.ranges[view.field];
+      const c = constantOf(view.field);
+      const maxAbs = c!==undefined ? Math.abs(c) : Math.max(Math.abs(rng.min), Math.abs(rng.max));
       curUnit = def[2]==='len' ? pickLenUnit(maxAbs) : pickStressUnit(maxAbs);
       curLabel = def[1].split(' ')[0];
-      cbTitle.textContent = `${curLabel} (${curUnit.name})`;
       ticksCol.innerHTML = '';
-      for(let i=0;i<=10;i++){
-        const yPx = (CB_HEIGHT-1)*(i/10);
-        const v = rng.max - i*(rng.max-rng.min)/10;
-        const t = document.createElement('span'); t.style.top = yPx+'px'; t.textContent = fmt(v/curUnit.f, 3);
+      const cctx = cbCanvas.getContext('2d');
+      if(c!==undefined){
+        cbTitle.textContent = `${curLabel} (${curUnit.name}) — ค่าคงที่ทั้งแผ่น`;
+        cctx.setTransform(1,0,0,1,0,0);
+        cctx.fillStyle = rainbowColor(0.5);
+        cctx.fillRect(0, 0, cbCanvas.width, cbCanvas.height);
+        const t = document.createElement('span'); t.style.top = ((CB_HEIGHT-1)/2)+'px'; t.textContent = fmt(c/curUnit.f, 4);
         ticksCol.appendChild(t);
+      } else {
+        cbTitle.textContent = `${curLabel} (${curUnit.name})`;
+        drawColorbarInto(cbCanvas);
+        for(let i=0;i<=10;i++){
+          const yPx = (CB_HEIGHT-1)*(i/10);
+          const v = rng.max - i*(rng.max-rng.min)/10;
+          const t = document.createElement('span'); t.style.top = yPx+'px'; t.textContent = fmt(v/curUnit.f, 3);
+          ticksCol.appendChild(t);
+        }
       }
-      drawStructuralField(cv, { mesh:state.mesh, values:vals, min:rng.min, max:rng.max, ux:res.ux, uy:res.uy,
-        scale:curScale(), showUndeformed:true, wire:view.wire });
     }
+
+    // One frame: shape and values both scaled by the load factor `phase`
+    function drawField(){
+      const rng = res.ranges[view.field];
+      const c = constantOf(view.field);
+      const base = res.fields[view.field];
+      let values = base;
+      if(c===undefined && phase!==1){
+        values = new Float64Array(base.length);
+        for(let i=0;i<base.length;i++) values[i] = base[i]*phase;
+      }
+      drawStructuralField(cv, { mesh:state.mesh, values, min:rng.min, max:rng.max, ux:res.ux, uy:res.uy,
+        constant: c!==undefined ? c*phase : undefined,
+        scale:curScale()*phase, showUndeformed:true, wire:view.wire });
+    }
+    function redraw(){ updateLegend(); drawField(); }
     fsel.addEventListener('change', ()=>{ view.field = fsel.value; redraw(); });
     syncScaleUi();
+    syncPhaseUi();
     redraw();
+
+    // --- playback: load factor 0 -> 1 -> 0, smooth (cosine) ramp, loops ---
+    const FRAMES = 30; // frames from 0 to full load; a full cycle is 2*FRAMES
+    let frame = 0;
+    const playRow = document.createElement('div'); playRow.className='actions'; playRow.style.marginTop='10px';
+    const playBtn = document.createElement('button'); playBtn.className='primary';
+    const pauseBtn = document.createElement('button'); pauseBtn.className='secondary'; pauseBtn.textContent='⏸ หยุดชั่วคราว';
+    const restartBtn = document.createElement('button'); restartBtn.className='secondary'; restartBtn.textContent='⏮ เริ่มใหม่';
+    [playBtn, pauseBtn, restartBtn].forEach(b=>{ b.type='button'; playRow.appendChild(b); });
+    main.appendChild(playRow);
+    const fpsNote = document.createElement('div'); fpsNote.className='unit'; fpsNote.style.margin='4px 0 12px 0';
+    fpsNote.textContent = 'เล่นภาพเคลื่อนไหวการเสียรูปขณะแรงค่อย ๆ เพิ่มจาก 0 ถึงเต็มแล้วลดกลับ วนซ้ำอัตโนมัติ (วัสดุยืดหยุ่นเชิงเส้น: การเสียรูปและความเค้นแปรผันตรงกับแรง) — สีของ contour ใช้สเกลของแรงเต็มคงที่ตลอด';
+    main.appendChild(fpsNote);
+
+    function syncButtons(){
+      const playing = isPlaying();
+      playBtn.textContent = playing ? '▶ กำลังเล่น...' : '▶ เล่น';
+      playBtn.disabled = playing;
+      pauseBtn.disabled = !playing;
+    }
+    function frameToPhase(k){ return (1-Math.cos(Math.PI*k/FRAMES))/2; }
+    function phaseToFrame(f){ return Math.round(FRAMES*Math.acos(Math.max(-1, Math.min(1, 1-2*f)))/Math.PI); }
+
+    phSlider.addEventListener('input', ()=>{
+      stopPlayback();
+      phase = parseFloat(phSlider.value)/100;
+      syncPhaseUi(); drawField(); syncButtons();
+    });
+    playBtn.onclick = ()=>{
+      if(!view.deform){ // nothing would move with the deformed shape switched off
+        view.deform = true; deformLabel.firstChild.checked = true; syncScaleUi();
+      }
+      // continue from the current load factor, on the rising branch (restart from 0 if at full load)
+      frame = phase>=1 ? 0 : phaseToFrame(phase);
+      startPlayback(()=>{
+        frame = (frame+1) % (2*FRAMES);
+        phase = frameToPhase(frame);
+        syncPhaseUi(); drawField();
+      }, 50);
+      syncButtons();
+    };
+    pauseBtn.onclick = ()=>{ stopPlayback(); syncButtons(); };
+    restartBtn.onclick = ()=>{ stopPlayback(); frame = 0; phase = 0; syncPhaseUi(); drawField(); syncButtons(); };
+    syncButtons();
 
     // --- export ---
     const exportRow = document.createElement('div'); exportRow.className='actions'; exportRow.style.marginTop='10px';
