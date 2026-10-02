@@ -20,6 +20,89 @@ npx serve .
 Then open the printed `localhost` URL. That's the only "build step" — there
 isn't one otherwise.
 
+## Package 4 — Structural module (static, linear elastic)
+
+Step 1 now has a working **Structural (elastic)** option next to Heat
+Transfer. It is **static only** (no dynamics) and everything is in **SI**
+(m, Pa, N). The geometry and mesh steps are shared with the heat module;
+the material, supports/loads and results steps have structural versions,
+chosen in `ui/layout.js` from `state.equation`. Switching physics keeps
+the geometry and mesh but clears any old result.
+
+**What it solves**
+- **2D**: plane stress or plane strain (chosen on the material step),
+  isotropic linear elastic (E, ν), thickness t (plane stress; plane strain
+  is a 1 m-deep slice). Linear = CST (3-node), quadratic = LST (6-node),
+  on the existing rectangle / freeform-polygon meshes. 2 DOF per node.
+- **1D**: axial bar (E, A), 2-node or 3-node elements. 1 DOF per node.
+
+**Supports and loads (step 4)** — per edge: Free, Fixed (ux = uy = 0),
+Roller x (ux = 0), Roller y (uy = 0), Traction (uniform tx, ty, in Pa);
+1D ends: Free / Fixed / axial point load. In 2D also point loads (Fx, Fy)
+at the shape's corners (rectangle corners, or polygon vertices). Corners
+are always mesh nodes, so these can be set before meshing. Force and
+stress inputs have a unit selector (N/kN/MN, Pa/kPa/MPa/GPa...) that only
+changes how a value is typed; `state` always holds SI.
+The step refuses to continue until the supports can stop rigid-body
+motion, and the solver double-checks (clear Thai error otherwise).
+
+**Results (step 6)** — contour of |u|, ux, uy, von Mises, σx, σy, τxy on
+the **deformed mesh** (adjustable exaggeration, Auto / ×1, dashed
+undeformed outline), hover readout, mesh overlay, PNG and CSV export; for
+1D a line chart of u(x) or σ(x). Every result also shows an **equilibrium
+check** (applied loads + support reactions ≈ 0).
+
+**Reference solutions** (`solver/structural-exact.js`): 1D bar (u linear);
+2D uniform-stress patch test (left Roller x + bottom Roller y + uniform
+traction on the right/top edge — must match to round-off for any mesh);
+and an end-loaded cantilever, compared against Euler–Bernoulli and
+Timoshenko tip deflection (a *reference*, not an exact elasticity
+solution — the panel says so).
+
+**Solver** — new files; the heat solvers are untouched. K is a **sparse
+CSR** matrix (2 DOF/node would make the old dense n×n matrix 4× larger).
+Constraints are applied by working on the free DOFs only, which also gives
+the reactions as K·u − F. "Conjugate Gradient" is a Jacobi-preconditioned
+CG; "Direct" is dense LU on the free DOFs, capped at 2,000 DOF. The 2D
+mesh-size cap for structural models is 1,500 elements (heat: 5,000).
+Stresses are computed per element, then averaged at shared nodes for the
+contour.
+
+**Measured in Node (no browser):**
+- Bar, linear and quadratic, CG and Direct: tip displacement PL/(EA) to
+  ~1e-16 relative; σ = P/A exact.
+- Uniform-stress patch test, plane stress and plane strain, linear and
+  quadratic, CG and Direct: max displacement error ≤ 1e-16 m.
+- Cantilever (L = 1 m, h = 0.2 m, plane stress, Timoshenko reference
+  0.5156 mm): linear 160 el → 0.4225 mm (−18 %, the CST is too stiff in
+  bending), linear 1000 el → 0.4961 mm (−3.8 %), quadratic 160 el →
+  0.5132 mm (−0.5 %). Good material for a "why higher order" lesson.
+- Freeform L-shaped polygon with a corner point load, linear and
+  quadratic: corner → node mapping correct, ΣR + ΣF ≈ 1e-12 relative.
+- A DOM/canvas-stub run clicking through all six steps for 1D, rectangle
+  and polygon × linear/quadratic × CG/Direct, plus the three structural
+  presets and the existing heat flow (heat solve and heat presets still
+  work). Not tested: real pixels, mobile layout, click-through in an
+  actual browser — please open it once and try each step.
+
+**Known limits (by design, this version)**: Roller supports are
+axis-aligned only (no roller normal to a slanted polygon edge); no body
+force, thermal strain, or non-zero prescribed displacement; one material
+per model; small-deformation theory; stress contours are smoothed by
+nodal averaging, so values at sharp corners and point loads are
+singular and grow as the mesh is refined.
+
+**Files** — new: `js/mesh/structural-info.js`,
+`js/solver/structural-assembly.js`, `js/solver/structural-solver.js`,
+`js/solver/structural-exact.js`, `js/render/structural-canvas.js`,
+`js/render/structural-markup.js`, `js/ui/structural-format.js`,
+`js/ui/steps/structural-material-step.js`,
+`js/ui/steps/structural-bc-step.js`,
+`js/ui/steps/structural-solve-step.js`. Changed: `js/state.js`,
+`js/mesh/mesh-service.js` (element cap), `js/ui/layout.js`,
+`js/ui/info-panel.js`, `js/ui/steps/equation-step.js`,
+`js/ui/steps/geometry-step.js`, `js/ui/steps/mesh-step.js`, `README.md`.
+
 ## Polygon mesh quality (post-Package 3)
 
 Polygon meshes used to be built by ear-clipping the outline and then
