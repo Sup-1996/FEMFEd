@@ -3,9 +3,10 @@ import { buildLineMesh, quadraticizeLine } from './line-mesh.js';
 import { buildRectangleMesh, rectDivisionsForTarget } from './rectangle-mesh.js';
 import { buildPolygonMesh } from './polygon-mesh.js';
 import { quadraticize } from './quadratic-mesh.js';
+import { maxElementsCap } from './structural-info.js';
 
   export function generateMesh(){
-    const maxEl = Math.max(1, Math.min(5000, Math.round(state.maxElements)));
+    const maxEl = Math.max(1, Math.min(maxElementsCap(), Math.round(state.maxElements)));
     let base;
     if(state.dimension==='1d'){
       base = buildLineMesh(state.geom.length, maxEl);
