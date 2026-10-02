@@ -9,6 +9,9 @@ import { renderMaterialStep } from './steps/material-step.js';
 import { renderMeshStep } from './steps/mesh-step.js';
 import { renderBcStep } from './steps/bc-step.js';
 import { renderSolveStep } from './steps/solve-step.js';
+import { renderStructuralMaterialStep } from './steps/structural-material-step.js';
+import { renderStructuralBcStep } from './steps/structural-bc-step.js';
+import { renderStructuralSolveStep } from './steps/structural-solve-step.js';
 
 /**
  * Top-level render orchestration.
@@ -46,11 +49,12 @@ export function renderMain(){
   main.innerHTML = '';
   document.getElementById('actionsBar').innerHTML = ''; // navButtons() renders here, not into `main` — see dom-helpers.js
   const key = STEPS[state.step].key;
+  const structural = state.equation==='structure'; // geometry + mesh steps are shared; material/bc/solve have a structural version
   if(key==='equation') renderEquationStep(main);
   else if(key==='geometry') renderGeometryStep(main);
-  else if(key==='material') renderMaterialStep(main);
-  else if(key==='mesh') renderMeshStep(main);
-  else if(key==='bc') renderBcStep(main);
-  else if(key==='solve') renderSolveStep(main);
+  else if(key==='material') (structural ? renderStructuralMaterialStep : renderMaterialStep)(main);
+  else if(key==='mesh') renderMeshStep(main); // shared: the mesh step adapts its wording/limits to state.equation
+  else if(key==='bc') (structural ? renderStructuralBcStep : renderBcStep)(main);
+  else if(key==='solve') (structural ? renderStructuralSolveStep : renderSolveStep)(main);
   main.scrollTop = prevScroll;
 }

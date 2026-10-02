@@ -1,5 +1,6 @@
 import { state } from '../state.js';
 import { bboxFor2DShape, polygonVertexCount } from '../mesh/shape-info.js';
+import { structuralMaterialRows, structuralResultRows } from './structural-format.js';
 
 /**
  * Right-hand "model summary" panel: a running dump of every relevant
@@ -12,8 +13,9 @@ import { bboxFor2DShape, polygonVertexCount } from '../mesh/shape-info.js';
     info.innerHTML = '<h2>สรุปโมเดล</h2>';
 
       const rows = [];
-      rows.push(['สมการ', state.equation==='heat' ? 'Heat Transfer' : '-']);
-      rows.push(['รูปแบบ', state.analysisType==='steady' ? 'Steady state' : 'Transient']);
+      const isStruct = state.equation==='structure';
+      rows.push(['สมการ', isStruct ? 'Structural (elastic)' : (state.equation==='heat' ? 'Heat Transfer' : '-')]);
+      rows.push(['รูปแบบ', isStruct ? 'Static' : (state.analysisType==='steady' ? 'Steady state' : 'Transient')]);
       rows.push(['มิติ', state.dimension==='1d' ? '1D' : '2D']);
       if(state.dimension==='1d'){
         rows.push(['ความยาว', `${state.geom.length} m`]);
@@ -26,9 +28,13 @@ import { bboxFor2DShape, polygonVertexCount } from '../mesh/shape-info.js';
         rows.push(['จำนวนจุด/ขอบ', polygonVertexCount()]);
         rows.push(['ขนาดกรอบ', `${bbox.w.toFixed(2)} × ${bbox.h.toFixed(2)} m`]);
       }
+      if(isStruct){
+        structuralMaterialRows(rows);
+      } else {
       rows.push(['k', state.material.k + ' W/(m·K)']);
       if(state.material.Q) rows.push(['Q', state.material.Q + ' W/m³']);
-      if(state.analysisType==='transient'){
+      }
+      if(!isStruct && state.analysisType==='transient'){
         rows.push(['ρ', state.material.rho + ' kg/m³']);
         rows.push(['cp', state.material.cp + ' J/(kg·K)']);
         rows.push(['ρc', (state.material.rho*state.material.cp) + ' J/(m³·K)']);
@@ -41,7 +47,9 @@ import { bboxFor2DShape, polygonVertexCount } from '../mesh/shape-info.js';
         rows.push(['จำนวนโหนด', state.mesh.nodes.length]);
         rows.push(['จำนวนเอลิเมนต์', state.mesh.elements.length]);
       }
-      if(state.results){
+      if(state.results && isStruct){
+        if(state.results.structural) structuralResultRows(rows);
+      } else if(state.results){
         const methodLabels = {cg:'Conjugate Gradient', direct:'Direct (LU)'};
         rows.push(['Solver', methodLabels[state.solverMethod]]);
         if(state.results.transient){
