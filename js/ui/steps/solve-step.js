@@ -4,7 +4,7 @@ import { eqBlock, frac, rm, bar } from '../../render/equation-markup.js';
 import { solveHeatConduction } from '../../solver/steady-solver.js';
 import { solveTransientHeatConduction } from '../../solver/transient-solver.js';
 import { draw1DMesh, draw1DResultsChart, attach1DChartHover } from '../../render/domain-1d-canvas.js';
-import { drawMeshCanvas, drawColorbarInto, drawExactContour, drawMeshWireframe, attachContourHover } from '../../render/contour-canvas.js';
+import { drawMeshCanvas, drawColorbarInto, drawExactContour, drawMeshWireframe, attachContourHover, isUniformRange } from '../../render/contour-canvas.js';
 import { sizeCanvas } from '../../render/hidpi.js';
 import { downloadCanvasPNG, downloadCSV } from '../export-helpers.js';
 import { isPlaying, startPlayback, stopPlayback } from '../playback.js';
@@ -157,6 +157,23 @@ import { renderAll, renderMain } from '../layout.js';
       navButtons(main, { back:true, next:false });
   }
 
+  /* Colorbar tick labels for a heat result. A single-valued field (see
+     isUniformRange() in render/contour-canvas.js) gets one label in the
+     middle instead of eleven identical ones. */
+  function fillHeatTicks(ticksCol, height, min, max){
+    if(isUniformRange(min, max)){
+      const t = document.createElement('span'); t.style.top = ((height-1)/2)+'px'; t.textContent = ((min+max)/2).toFixed(1)+'°';
+      ticksCol.appendChild(t);
+      return;
+    }
+    for(let i=0;i<=10;i++){
+      const yPx = (height-1)*(i/10);
+      const val = max - i*(max-min)/10;
+      const t = document.createElement('span'); t.style.top = yPx+'px'; t.textContent = val.toFixed(1)+'°';
+      ticksCol.appendChild(t);
+    }
+  }
+
   function renderTransientResults(main){
     const results = state.results;
     if(state.transientViewStep===undefined || state.transientViewStep===null) state.transientViewStep = results.steps;
@@ -188,16 +205,11 @@ import { renderAll, renderMain } from '../layout.js';
           cbCanvas = document.createElement('canvas'); sizeCanvas(cbCanvas, 24, CB_HEIGHT);
           const ticksCol = document.createElement('div'); ticksCol.className='ticks';
           ticksCol.style.height = CB_HEIGHT+'px'; ticksCol.style.width='46px';
-          for(let i=0;i<=10;i++){
-            const yPx = (CB_HEIGHT-1)*(i/10);
-            const val = results.max - i*(results.max-results.min)/10;
-            const t = document.createElement('span'); t.style.top=yPx+'px'; t.textContent=val.toFixed(1)+'°';
-            ticksCol.appendChild(t);
-          }
+          fillHeatTicks(ticksCol, CB_HEIGHT, results.min, results.max);
           cbWrap.appendChild(cbCanvas); cbWrap.appendChild(ticksCol);
           wrap.appendChild(cbWrap);
           main.appendChild(wrap);
-          drawColorbarInto(cbCanvas);
+          drawColorbarInto(cbCanvas, isUniformRange(results.min, results.max));
 
           const meshLineLabel = document.createElement('label'); meshLineLabel.style.display='inline-flex'; meshLineLabel.style.alignItems='center'; meshLineLabel.style.gap='6px'; meshLineLabel.style.fontSize='13.5px'; meshLineLabel.style.color='var(--ink-soft)'; meshLineLabel.style.marginTop='8px';
           const meshLineChk = document.createElement('input'); meshLineChk.type='checkbox';
@@ -276,7 +288,9 @@ import { renderAll, renderMain } from '../layout.js';
       main.appendChild(exportRow);
 
       const note = document.createElement('div'); note.className='eq-note'; note.style.marginTop='10px';
-      note.textContent = `สเกลสีคงที่ตลอดช่วงเวลา (${results.min.toFixed(2)}–${results.max.toFixed(2)} °C) เพื่อให้เปรียบเทียบระหว่างช่วงเวลาต่าง ๆ ได้อย่างถูกต้อง — ${results.exact.note}`;
+      note.textContent = (isUniformRange(results.min, results.max)
+        ? `อุณหภูมิเท่ากันทั้งโมเดลตลอดช่วงเวลา (${((results.min+results.max)/2).toFixed(2)} °C) จึงแสดงเป็นสีเดียว — `
+        : `สเกลสีคงที่ตลอดช่วงเวลา (${results.min.toFixed(2)}–${results.max.toFixed(2)} °C) เพื่อให้เปรียบเทียบระหว่างช่วงเวลาต่าง ๆ ได้อย่างถูกต้อง — `) + results.exact.note;
       main.appendChild(note);
   }
 
@@ -300,12 +314,7 @@ import { renderAll, renderMain } from '../layout.js';
         const ticksCol = document.createElement('div'); ticksCol.className='ticks';
         ticksCol.style.height = CB_HEIGHT+'px';
         ticksCol.style.width = '46px';
-          for(let i=0;i<=10;i++){
-            const yPx = (CB_HEIGHT-1) * (i/10);
-            const val = state.results.max - i*(state.results.max-state.results.min)/10;
-            const t = document.createElement('span'); t.style.top = yPx+'px'; t.textContent = val.toFixed(1)+'°';
-            ticksCol.appendChild(t);
-          }
+          fillHeatTicks(ticksCol, CB_HEIGHT, state.results.min, state.results.max);
           cbWrap.appendChild(cbCanvas); cbWrap.appendChild(ticksCol);
           wrap.appendChild(cbWrap);
 
@@ -321,7 +330,7 @@ import { renderAll, renderMain } from '../layout.js';
           main.appendChild(wrap);
 
           drawMeshCanvas(cv, state.mesh, true);
-          drawColorbarInto(cbCanvas);
+          drawColorbarInto(cbCanvas, isUniformRange(state.results.min, state.results.max));
           if(cvExact) drawExactContour(cvExact, state.mesh, state.results.exact.T, state.results.min, state.results.max);
 
           const meshLineLabel = document.createElement('label'); meshLineLabel.style.display='inline-flex'; meshLineLabel.style.alignItems='center'; meshLineLabel.style.gap='6px'; meshLineLabel.style.fontSize='13.5px'; meshLineLabel.style.color='var(--ink-soft)'; meshLineLabel.style.marginTop='8px';
@@ -333,6 +342,12 @@ import { renderAll, renderMain } from '../layout.js';
           meshLineLabel.appendChild(meshLineChk);
           meshLineLabel.appendChild(document.createTextNode('แสดงเส้นเมชทับ contour'));
           main.appendChild(meshLineLabel);
+
+          if(isUniformRange(state.results.min, state.results.max)){
+            const uni = document.createElement('div'); uni.className='eq-note';
+            uni.textContent = `อุณหภูมิเท่ากันทั้งโมเดล (${((state.results.min+state.results.max)/2).toFixed(2)} °C) จึงแสดงเป็นสีเดียว`;
+            main.appendChild(uni);
+          }
       }
 
       // --- Export the current result ---
