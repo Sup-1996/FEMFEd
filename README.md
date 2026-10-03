@@ -120,6 +120,26 @@ singular and grow as the mesh is refined.
 `js/ui/info-panel.js`, `js/ui/steps/equation-step.js`,
 `js/ui/steps/geometry-step.js`, `js/ui/steps/mesh-step.js`, `README.md`.
 
+## Single-valued heat results (after Package 4)
+
+The "one value, one colour" rule that the structural results already
+had now applies to the **heat** results too. When a temperature field's
+spread is negligible — max − min ≤ 1e-6 × max(|min|, |max|, 1), i.e. a
+uniform temperature such as every edge held at the same value with no
+heat source, or a transient run whose initial temperature equals the
+boundary temperature — the contour is painted one flat colour (instead
+of stretching round-off over the whole rainbow), the colour bar becomes
+one solid block with a single label, and a note under the plot says the
+temperature is the same everywhere. The same applies to the exact-
+solution contour and to the transient plot (judged over the whole run,
+since its colour scale is fixed in time). Ordinary results are
+unchanged: 11 ticks and the full gradient. The structural fields use
+their own detection (relative to the largest value of their kind)
+because displacements in metres can legitimately be ~1e-7, so the heat
+threshold's floor of 1 would flatten them.
+Files: `js/render/contour-canvas.js` (`isUniformRange()`, solid
+`drawColorbarInto(canvas, true)`), `js/ui/steps/solve-step.js`.
+
 ## Polygon mesh quality (post-Package 3)
 
 Polygon meshes used to be built by ear-clipping the outline and then
