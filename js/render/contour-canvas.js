@@ -26,6 +26,25 @@ import { showTip, hideTip } from './hover-tip.js';
  * highlight an edge directly on the meshed/contoured canvas.
  */
 
+  /* ---- Single-valued fields (heat results) ----
+     When max - min is negligible (a uniform temperature, e.g. every edge
+     held at the same value with no heat source, or a transient run whose
+     initial temperature equals the boundary temperature), stretching that
+     round-off over the whole rainbow would show many colours for one
+     value. isUniformRange() detects it; flatRange() re-centres the scale
+     on the value so the whole field paints one flat colour (middle of the
+     scale). The threshold is relative (1e-6) with a floor of 1 so it also
+     works around 0 °C. Only the heat paths use it — the structural fields
+     (metres, can be ~1e-7) have their own detection in structural-solve-step.js. */
+  export function isUniformRange(min, max){
+    return (max-min) <= 1e-6*Math.max(Math.abs(min), Math.abs(max), 1);
+  }
+  function flatRange(min, max){
+    if(!isUniformRange(min, max)) return [min, max];
+    const c = (min+max)/2;
+    return [c-1, c+1];
+  }
+
   /* ---- True per-pixel (Gouraud-style) smooth gradient contour fill ---- */
   export function fillContourGradient(canvas, mesh, T, min, max, tf){
     const ctx = canvas.getContext('2d');
@@ -76,7 +95,8 @@ import { showTip, hideTip } from './hover-tip.js';
     const max = overrideData ? overrideData.max : (T ? state.results.max : 1);
 
    if(T){
-     fillContourGradient(canvas, mesh, T, min, max, tf);
+     const [fmin, fmax] = flatRange(min, max);
+     fillContourGradient(canvas, mesh, T, fmin, fmax, tf);
    } else {
      for(const [a,b,c] of getRenderTriangles(mesh)){
        const A=mesh.nodes[a], B=mesh.nodes[b], C=mesh.nodes[c];
@@ -204,9 +224,11 @@ import { showTip, hideTip } from './hover-tip.js';
     ctx.stroke();
   }
 
-  export function drawColorbarInto(canvas){
+  /* solid=true paints one flat block (middle of the scale) for a single-valued field. */
+  export function drawColorbarInto(canvas, solid){
     const ctx = canvas.getContext('2d');
     ctx.setTransform(1,0,0,1,0,0);
+    if(solid){ ctx.fillStyle = rainbowColor(0.5); ctx.fillRect(0, 0, canvas.width, canvas.height); return; }
     const H = canvas.height;
     for(let y=0;y<H;y++){
       const t = 1 - y/(H-1);
@@ -220,7 +242,8 @@ import { showTip, hideTip } from './hover-tip.js';
       ctx.setTransform(1,0,0,1,0,0);
       const dpr = canvas._dpr || 1;
       const tf = fitTransform(mesh.bbox, canvas.width, canvas.height, 18*dpr);
-      fillContourGradient(canvas, mesh, Texact, min, max, tf);
+      const [fmin, fmax] = flatRange(min, max);
+      fillContourGradient(canvas, mesh, Texact, fmin, fmax, tf);
       ctx.strokeStyle = '#3A4145'; ctx.lineWidth=1.2*dpr;
       drawOutline(ctx, mesh, tf);
   }
