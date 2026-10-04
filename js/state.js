@@ -1,6 +1,6 @@
 export const state = {
     step: 0,
-    equation: 'heat',           // 'heat' | 'structure'
+    equation: 'heat',           // 'heat' | 'structure' | 'wave'
     analysisType: 'steady',     // heat: 'steady' | 'transient'; structure: always 'steady' (= static)
     dimension: '2d',            // '1d' | '2d'
     shape: 'rectangle',         // 'line' | 'rectangle' | 'polygon'
@@ -19,7 +19,18 @@ export const state = {
        structural: { mode:'plane_stress', E:200e9, nu:0.3, thickness:0.01, area:1e-4 }, // E [Pa], thickness [m], area [m^2] (1D bar)
        sbc: {},                     // structural edge BCs: edgeName -> {type:'free'|'fixed'|'roller_x'|'roller_y'|'traction'|'load', tx, ty, value}
        spl: {},                     // structural point loads at shape corners: cornerKey -> {fx, fy} [N]
-       sview: { field:'vm', deform:true, scale:null, wire:false } // results-view options (scale null = auto)
+       sview: { field:'vm', deform:true, scale:null, wire:false }, // results-view options (scale null = auto)
+
+       // ---- Wave equation module (scalar wave, time domain) — SI: m, s, m/s ----
+       // u_tt + damping*u_t = c^2 * laplace(u). null centre/sigma = "auto" (resolved from the shape's bounding box).
+       wave: {
+         c: 1, damping: 0, massType: 'consistent',       // c [m/s]; damping [1/s]; 'consistent' | 'lumped'
+         ic: { type:'gaussian', amp:1, x0:null, y0:null, sigma:null, m:1, n:1, velType:'zero', v0:0 },
+         transient: { totalTime: 2, steps: 400 },
+         probe: { x:null, y:null },                       // null = centre of the shape
+         view: { step:null, speed:1 },                    // results-view options (step null = last frame)
+       },
+       wbc: {},                     // wave edge BCs: edgeName -> {type:'fixed'|'free'} (fixed: u = 0; free: du/dn = 0)
 };
 
 export const STEPS = [
