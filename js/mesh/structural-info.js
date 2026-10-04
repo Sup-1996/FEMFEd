@@ -19,9 +19,12 @@ import { getEdgeNamesForShape, polygonVertexCount, bboxFor2DShape } from './shap
  */
 
   /* Mesh-size cap for the UI: structural 2D models carry 2 DOF per node, so
-     they are capped lower than the heat module's 5,000 elements. */
+     they are capped lower than the heat module's 5,000 elements (the wave
+     module is capped at 2,000 because every time step's field is stored). */
   export function maxElementsCap(){
-    return (state.equation==='structure' && state.dimension==='2d') ? 1500 : 5000;
+    if(state.dimension==='2d' && state.equation==='structure') return 1500;
+    if(state.dimension==='2d' && state.equation==='wave') return 2000; // 2000 time steps x nodes of stored snapshots
+    return 5000;
   }
 
   export const SBC_TYPES_1D = ['free','fixed','load'];
