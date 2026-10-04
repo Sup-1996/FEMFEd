@@ -12,6 +12,9 @@ import { renderSolveStep } from './steps/solve-step.js';
 import { renderStructuralMaterialStep } from './steps/structural-material-step.js';
 import { renderStructuralBcStep } from './steps/structural-bc-step.js';
 import { renderStructuralSolveStep } from './steps/structural-solve-step.js';
+import { renderWaveMaterialStep } from './steps/wave-material-step.js';
+import { renderWaveBcStep } from './steps/wave-bc-step.js';
+import { renderWaveSolveStep } from './steps/wave-solve-step.js';
 
 /**
  * Top-level render orchestration.
@@ -49,12 +52,14 @@ export function renderMain(){
   main.innerHTML = '';
   document.getElementById('actionsBar').innerHTML = ''; // navButtons() renders here, not into `main` — see dom-helpers.js
   const key = STEPS[state.step].key;
-  const structural = state.equation==='structure'; // geometry + mesh steps are shared; material/bc/solve have a structural version
+  // geometry + mesh steps are shared by all three physics; material/bc/solve each have their own version
+  const physics = state.equation; // 'heat' | 'structure' | 'wave'
+  const pick = (heat, structure, wave)=> physics==='structure' ? structure : (physics==='wave' ? wave : heat);
   if(key==='equation') renderEquationStep(main);
   else if(key==='geometry') renderGeometryStep(main);
-  else if(key==='material') (structural ? renderStructuralMaterialStep : renderMaterialStep)(main);
+  else if(key==='material') pick(renderMaterialStep, renderStructuralMaterialStep, renderWaveMaterialStep)(main);
   else if(key==='mesh') renderMeshStep(main); // shared: the mesh step adapts its wording/limits to state.equation
-  else if(key==='bc') (structural ? renderStructuralBcStep : renderBcStep)(main);
-  else if(key==='solve') (structural ? renderStructuralSolveStep : renderSolveStep)(main);
+  else if(key==='bc') pick(renderBcStep, renderStructuralBcStep, renderWaveBcStep)(main);
+  else if(key==='solve') pick(renderSolveStep, renderStructuralSolveStep, renderWaveSolveStep)(main);
   main.scrollTop = prevScroll;
 }
