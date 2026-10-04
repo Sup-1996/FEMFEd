@@ -20,6 +20,115 @@ npx serve .
 Then open the printed `localhost` URL. That's the only "build step" — there
 isn't one otherwise.
 
+## Package 5 — Wave equation module (time domain)
+
+Step 1 now has a **Wave equation** option next to Heat Transfer and
+Structural. It solves the scalar wave equation with optional linear
+damping, in SI (m, s, m/s):
+
+    u_tt + gamma * u_t = c^2 * laplace(u)
+
+read as the vibration of a **string (1D) or membrane (2D)**; the same
+equation describes sound pressure, with u as pressure. The geometry and
+mesh steps are shared with the other modules (1D bar; rectangle and
+freeform polygon; linear and quadratic elements); the material,
+initial/boundary-condition and results steps have wave versions chosen in
+`ui/layout.js` from `state.equation`. Switching physics keeps the
+geometry and mesh and clears any old result. The Structural module stays
+**static only** — the disabled "Dynamic" button on step 1 was removed.
+
+**Inputs**
+- Step 3: wave speed c [m/s] and damping gamma [1/s] (0 = lossless),
+  with the L/c crossing time shown as a guide for the simulated time.
+- Step 4 (before meshing): the initial condition — a **Gaussian pulse**
+  (amplitude, centre, width; "auto" = middle of the shape) or one
+  **eigenmode** (bar or rectangle only; the mode shape follows the edge
+  conditions you choose) — initial velocity zero or the same shape
+  scaled by v0; end time and number of steps (<= 2000, shortcut buttons
+  for "one crossing", "round trip", "two periods"); and per edge **Fixed**
+  (u = 0) or **Free** (du/dn = 0). A fixed end reflects with a sign flip,
+  a free end without. 1D shows a plot of the initial displacement.
+
+**Numerics** (`solver/wave-assembly.js`, `solver/wave-solver.js`):
+K = c^2 * integral(grad N . grad N) and M = integral(N N) (**consistent**)
+or the diagonal **lumped** form (HRZ, as in the heat module) are assembled
+as sparse CSR matrices (the 6-node triangle uses a 6-point degree-4
+quadrature rule, exact for N_i N_j). Time stepping is **Newmark-beta,
+average acceleration** (beta 1/4, gamma 1/2): unconditionally stable,
+second order, and it conserves energy exactly for the undamped system, so
+the energy plot is a real check. The effective matrix is constant in time,
+so it is built once (CG: Jacobi, warm-started from the previous step;
+Direct: LU factorised once, capped at 1,000 DOF). Fixed edges are removed
+by a mask. 2D wave meshes are capped at 2,000 elements (every step is
+stored as Float32 for the animation).
+
+**Results (step 6)** — the field at the chosen time (2D contour with a
+fixed colour scale symmetric about zero, so green = 0; 1D line chart with
+a fixed axis), a time slider with Play / Pause / Restart and a speed
+choice (x0.5 ... x4), a **probe** (u at a chosen point against time, with
+the exact curve when one exists), the **energy history** (kinetic,
+potential, total), PNG/CSV export of the shown frame and CSV of the time
+histories, and the Courant number c*dt/h. An all-zero field is shown as a
+single flat colour, like the single-valued rule used elsewhere.
+
+**Reference solutions** (`solver/wave-exact.js`):
+- *Eigenmode* initial condition on a bar or rectangle, any mix of fixed /
+  free edges, any damping (under-, critically- and over-damped), with or
+  without initial velocity: u = phi(x,y) q(t). Per axis the mode is
+  sin(k pi s/L) (fixed-fixed), cos(k pi s/L) (free-free),
+  sin((k-1/2) pi s/L) (fixed-free) or cos((k-1/2) pi s/L) (free-fixed).
+- *1D Gaussian pulse at rest, undamped*: d'Alembert's solution with the
+  initial profile continued past the ends by reflection — exact for all
+  times including the reflections (not offered if the pulse overlaps a
+  fixed end).
+- Everything else (2D pulse, damped pulse, a pulse with initial
+  velocity, polygons) shows a note saying why there is no reference.
+
+**Measured in Node (no browser):**
+- Energy conservation (undamped, Newmark): relative drift 1e-13 for the
+  eigenmode runs, ~1e-10 for the pulse runs (linear-solver tolerance
+  only); damped 2D pulse: energy ratio 0.229 against the expected
+  exp(-gamma T) = 0.223 (small difference from numerical damping).
+- 1D eigenmode, two periods, max error against the exact solution as a
+  fraction of the peak: linear 0.32 % (consistent) / 0.50 % (lumped),
+  quadratic 0.09 %; other edge pairs (free-free, fixed-free, free-fixed)
+  0.04-0.09 %; damped cases (under-, critical, over) <= 0.007 %.
+- 1D Gaussian pulse through more than one round trip (fixed-fixed,
+  400 linear elements, Courant 1): 0.69 %; fixed-free: 3.4 %.
+- 2D rectangle eigenmode (2,1): linear consistent 7.2 %, linear lumped
+  2.7 %, quadratic consistent 0.07 %, quadratic lumped 2.0 % — a good
+  "why quadratic / why consistent" lesson (numerical dispersion);
+  mixed free/fixed edges 0.27 %.
+- CG and Direct agree to 7e-9 on the final frame of a 2D pulse; the
+  largest case (2,000 quadratic elements x 2,000 steps, CG) runs in
+  about 5 s.
+- A DOM/canvas-stub run clicking through all steps for 1D, rectangle and
+  polygon x linear/quadratic x CG/Direct x consistent/lumped, the mode
+  button, a mixed edge condition, Play / Pause / Restart / slider / speed
+  / probe, the four wave presets, and the existing Heat and Structural
+  flows (all still work). Not tested: real pixels, mobile layout,
+  click-through in an actual browser — please open it once and try each
+  step.
+
+**Known limits (by design, this version)**: no forcing / sources; no
+absorbing boundary (waves reflect off every edge, fixed or free); no
+natural-frequency (eigenvalue) analysis — modes are used only as initial
+conditions; scalar wave only (no elastic waves); 2D pulse has no
+reference solution.
+
+**Files** — new: `js/mesh/wave-info.js`, `js/solver/wave-ic.js`,
+`js/solver/wave-assembly.js`, `js/solver/wave-solver.js`,
+`js/solver/wave-exact.js`, `js/render/wave-markup.js`,
+`js/render/wave-canvas.js`, `js/ui/wave-fields.js`,
+`js/ui/wave-format.js`, `js/ui/steps/wave-material-step.js`,
+`js/ui/steps/wave-bc-step.js`, `js/ui/steps/wave-solve-step.js`.
+Changed: `js/state.js`, `js/mesh/structural-info.js` (element cap),
+`js/solver/structural-assembly.js` (`buildCSR` exported),
+`js/render/structural-canvas.js` (line chart: fixed y range, x unit,
+time cursor), `js/ui/layout.js`, `js/ui/info-panel.js`,
+`js/ui/steps/equation-step.js`, `js/ui/steps/geometry-step.js`,
+`js/ui/steps/mesh-step.js`, `README.md`.
+
 ## Package 4 — Structural module (static, linear elastic)
 
 Step 1 now has a working **Structural (elastic)** option next to Heat
