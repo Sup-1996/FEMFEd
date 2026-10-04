@@ -178,7 +178,8 @@ import { edgeSegments, cornerPositions } from '../mesh/structural-info.js';
   /* ================= 1D line chart ================= */
   /**
    * o = { L, series:[{label,color,dash,width,markers,lines:[[{x,y}...],...]}],
-   *       yLabel, fmtY(v) }
+   *       yLabel, fmtY(v), yRange:[lo,hi] (optional fixed axis), xUnit (default ' m'),
+   *       vline (optional x of a vertical cursor) }
    * x in metres, y already in display units. series[0] is the numerical
    * result the hover readout reports; later series are reference curves.
    */
@@ -194,8 +195,9 @@ import { edgeSegments, cornerPositions } from '../mesh/structural-info.js';
     for(const s of o.series) for(const line of s.lines) for(const p of line){
       if(p.y<ymin) ymin=p.y; if(p.y>ymax) ymax=p.y;
     }
+    if(o.yRange){ ymin = o.yRange[0]; ymax = o.yRange[1]; }
     if(ymax-ymin < 1e-12){ ymax += 1; ymin -= 1; }
-    const span = ymax-ymin; ymax += 0.08*span; if(ymin<0) ymin -= 0.08*span;
+    const span = ymax-ymin; if(!o.yRange){ ymax += 0.08*span; if(ymin<0) ymin -= 0.08*span; }
     const xToPx = x => padL + (x/o.L)*plotW;
     const yToPx = y => padT + plotH - ((y-ymin)/(ymax-ymin))*plotH;
 
@@ -210,7 +212,7 @@ import { edgeSegments, cornerPositions } from '../mesh/structural-info.js';
     ctx.textAlign = 'center';
     for(let i=0;i<=4;i++){
       const x = o.L*i/4;
-      ctx.fillText(x.toFixed(2)+(i===4?' m':''), xToPx(x), padT+plotH+16);
+      ctx.fillText(x.toFixed(2)+(i===4 ? (o.xUnit!==undefined ? o.xUnit : ' m') : ''), xToPx(x), padT+plotH+16);
     }
     ctx.strokeStyle = '#7C8588'; ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.moveTo(padL,padT); ctx.lineTo(padL,padT+plotH); ctx.lineTo(padL+plotW,padT+plotH); ctx.stroke();
@@ -220,6 +222,11 @@ import { edgeSegments, cornerPositions } from '../mesh/structural-info.js';
     }
     ctx.fillStyle = '#3A4145'; ctx.font = '12px sans-serif'; ctx.textAlign = 'left';
     ctx.fillText(o.yLabel, padL, 16);
+
+    if(o.vline!==undefined){ // optional vertical cursor (e.g. the current time on a time-history chart)
+      ctx.strokeStyle = '#C0483A'; ctx.lineWidth = 1.2; ctx.setLineDash([4,3]);
+      ctx.beginPath(); ctx.moveTo(xToPx(o.vline),padT); ctx.lineTo(xToPx(o.vline),padT+plotH); ctx.stroke(); ctx.setLineDash([]);
+    }
 
     // draw reference curves first so the numerical result sits on top
     for(const s of [...o.series].reverse()){
