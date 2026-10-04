@@ -1,7 +1,7 @@
 import { state } from '../../state.js';
 import { makeTitle, navButtons } from '../dom-helpers.js';
 import {
-  eqBlock,
+  eqBlock, rm, frac,
   GOVERNING_EQ_GENERAL,
   GOVERNING_EQ_EXPANDED,
   GOVERNING_EQ_TRANSIENT_GENERAL,
@@ -11,6 +11,9 @@ import { generateMesh } from '../../mesh/mesh-service.js';
 import { solveHeatConduction } from '../../solver/steady-solver.js';
 import { solveStructural } from '../../solver/structural-solver.js';
 import { ensureStructuralDefaults } from '../../mesh/structural-info.js';
+import { solveWave } from '../../solver/wave-solver.js';
+import { ensureWaveDefaults } from '../../mesh/wave-info.js';
+import { WAVE_EQ_GENERAL, WAVE_EQ_1D, WAVE_EQ_2D, WAVE_EQ_SEMIDISCRETE } from '../../render/wave-markup.js';
 import {
   STRUCT_EQ_EQUILIBRIUM, STRUCT_EQ_PLANE_X, STRUCT_EQ_PLANE_Y,
   STRUCT_EQ_CONSTITUTIVE, STRUCT_EQ_KINEMATIC, STRUCT_EQ_BAR,
@@ -98,23 +101,63 @@ import { renderAll } from '../layout.js';
     }},
   ];
 
+  // Wave presets: each sets geometry, medium, initial condition, edges and time stepping,
+  // meshes, solves and jumps to the results step, like the presets above.
+  function waveBase(dim){
+    state.equation='wave'; state.analysisType='steady'; // (wave runs are always time-dependent; analysisType is unused)
+    state.dimension=dim; state.shape = dim==='1d' ? 'line' : 'rectangle';
+    state.wave.c = 1; state.wave.damping = 0; state.wave.massType = 'consistent';
+    state.wave.ic = { type:'gaussian', amp:1, x0:null, y0:null, sigma:null, m:1, n:1, velType:'zero', v0:0 };
+    state.wave.probe = { x:null, y:null }; state.wave.view = { step:null, speed:1 };
+    state.wbc = {}; ensureWaveDefaults();
+  }
+  const WAVE_PRESETS = [
+    { label:'สาย 1D: พัลส์เกาส์เซียน (ปลายยึด)', build(){
+        waveBase('1d');
+        state.geom.length = 1; state.elementOrder='linear'; state.maxElements=400;
+        Object.assign(state.wave.ic, { x0:0.3, sigma:0.05 });
+        state.wave.transient = { totalTime:2.5, steps:1000 }; // Courant number 1; the pulse reflects twice off the fixed ends
+    }},
+    { label:'สาย 1D: โหมดที่ 3 (มีคำตอบ exact)', build(){
+        waveBase('1d');
+        state.geom.length = 1; state.elementOrder='quadratic'; state.maxElements=30;
+        Object.assign(state.wave.ic, { type:'mode', m:3 });
+        state.wave.transient = { totalTime:4/3, steps:200 }; // two periods of mode 3 (T = 2/3 s)
+    }},
+    { label:'เยื่อ 2D: พัลส์กลางแผ่น', build(){
+        waveBase('2d');
+        state.geom.width = 1; state.geom.height = 0.6; state.elementOrder='linear'; state.maxElements=600;
+        state.wave.transient = { totalTime:1.2, steps:240 };
+    }},
+    { label:'เยื่อ 2D: โหมด (2,1) (มีคำตอบ exact)', build(){
+        waveBase('2d');
+        state.geom.width = 1; state.geom.height = 0.6; state.elementOrder='quadratic'; state.maxElements=200;
+        Object.assign(state.wave.ic, { type:'mode', m:2, n:1 });
+        const f = Math.sqrt(4+1/0.36)/2; // Hz for c = 1 on a 1 x 0.6 membrane
+        state.wave.transient = { totalTime:Number((2/f).toPrecision(5)), steps:300 }; // two periods
+    }},
+  ];
+
   function applyPreset(preset){
     preset.build();
     state.mesh = null; state.results = null;
     generateMesh();
     try{
-      if(state.equation==='structure') solveStructural(); else solveHeatConduction();
+      if(state.equation==='structure') solveStructural();
+      else if(state.equation==='wave') solveWave();
+      else solveHeatConduction();
     } catch(e){ state.results = null; }
     state.step = 5;
     renderAll();
   }
 
   export function renderEquationStep(main){
-    makeTitle(main, 'เลือกสมการที่ใช้จำลอง', 'เวอร์ชันนี้รองรับการถ่ายเทความร้อน (heat transfer) ทั้งแบบคงตัวและแบบไม่คงตัวตามเวลา และการวิเคราะห์โครงสร้างแบบสถิต (static structural, ยืดหยุ่นเชิงเส้น)');
+    makeTitle(main, 'เลือกสมการที่ใช้จำลอง', 'เวอร์ชันนี้รองรับการถ่ายเทความร้อน (heat transfer) ทั้งแบบคงตัวและแบบไม่คงตัวตามเวลา, การวิเคราะห์โครงสร้างแบบสถิต (static structural, ยืดหยุ่นเชิงเส้น) และสมการคลื่น (wave equation) ในโดเมนเวลา');
     const wrap = document.createElement('div'); wrap.className='eq-choice';
     const opts = [
         {id:'heat', label:'Heat Transfer', tag:'พร้อมใช้งาน', enabled:true},
         {id:'structure', label:'Structural (elastic)', tag:'static • พร้อมใช้งาน', enabled:true},
+        {id:'wave', label:'Wave equation', tag:'time-domain • พร้อมใช้งาน', enabled:true},
     ];
     opts.forEach(o=>{
         const b = document.createElement('button'); b.type='button';
@@ -133,7 +176,14 @@ import { renderAll } from '../layout.js';
     main.appendChild(wrap);
 
     const isStruct = state.equation==='structure';
-    if(!isStruct){
+    const isWave = state.equation==='wave';
+    if(isWave){
+      const wrap2 = document.createElement('div'); wrap2.className='eq-choice';
+      const b = document.createElement('button'); b.type='button'; b.className='eq-btn sel';
+      b.innerHTML = 'Time-dependent (transient)<span class="tag">เดินเวลาด้วย Newmark-β • คลื่นสั่นและเคลื่อนที่ตามเวลา</span>';
+      wrap2.appendChild(b);
+      main.appendChild(wrap2);
+    } else if(!isStruct){
       const wrap2 = document.createElement('div'); wrap2.className='eq-choice';
       const opts2 = [
          {id:'steady', label:'Steady state', enabled:true},
@@ -153,9 +203,6 @@ import { renderAll } from '../layout.js';
       const b = document.createElement('button'); b.type='button'; b.className='eq-btn sel';
       b.innerHTML = 'Static (สถิต)<span class="tag">โหลดคงที่ ไม่คิดผลตามเวลา/ความเฉื่อย</span>';
       wrap2.appendChild(b);
-      const b2 = document.createElement('button'); b2.type='button'; b2.className='eq-btn disabled'; b2.disabled = true;
-      b2.innerHTML = 'Dynamic<span class="tag">ยังไม่รองรับ</span>';
-      wrap2.appendChild(b2);
       main.appendChild(wrap2);
     }
 
@@ -163,7 +210,7 @@ import { renderAll } from '../layout.js';
     const presetCap = document.createElement('div'); presetCap.className='eq-caption'; presetCap.textContent='หรือเริ่มจากตัวอย่างสำเร็จรูป (ตั้งค่าและแก้ปัญหาให้ทันที แล้วข้ามไปดูผลลัพธ์)';
     presetBox.appendChild(presetCap);
     const presetRow = document.createElement('div'); presetRow.style.display='flex'; presetRow.style.gap='10px'; presetRow.style.flexWrap='wrap';
-    (isStruct ? STRUCT_PRESETS : PRESETS).forEach(preset=>{
+    (isWave ? WAVE_PRESETS : (isStruct ? STRUCT_PRESETS : PRESETS)).forEach(preset=>{
       const b = document.createElement('button'); b.type='button'; b.className='secondary';
       b.textContent = preset.label;
       b.onclick = ()=> applyPreset(preset);
@@ -172,7 +219,18 @@ import { renderAll } from '../layout.js';
     presetBox.appendChild(presetRow);
     main.appendChild(presetBox);
 
-    if(isStruct){
+    if(isWave){
+      const body = eqBlock(main, 'Governing equation (wave equation with linear damping)', WAVE_EQ_GENERAL,
+        `เมื่อ <b>u</b> คือการกระจัดของสายหรือเยื่อ (หรือความดันของคลื่นเสียง) ที่ตำแหน่งและเวลาใด ๆ, <b>c</b> คือความเร็วคลื่น และ <b>γ</b> คือค่าการหน่วงแบบเชิงเส้น (γ = 0 คือไม่มีการสูญเสียพลังงาน)<br>
+         เขียนแยกตามมิติได้เป็น (1 มิติ — สาย/แท่ง, และ 2 มิติ — เยื่อ/แผ่น):`);
+      const e1 = document.createElement('div'); e1.className='equation'; e1.style.marginTop='6px'; e1.innerHTML = WAVE_EQ_1D; body.appendChild(e1);
+      const e2 = document.createElement('div'); e2.className='equation'; e2.style.marginTop='6px'; e2.innerHTML = WAVE_EQ_2D; body.appendChild(e2);
+      const body2 = eqBlock(main, 'ผลเฉลยจะต้องการเงื่อนไขเริ่มต้นสองชุด', `u${rm('(')}x,0${rm(') = ')}u<sub>0</sub>${rm('(')}x${rm('),  ')}${frac('∂u','∂t')}${rm('(')}x,0${rm(') = ')}v<sub>0</sub>${rm('(')}x${rm(')')}`,
+        'เพราะสมการเป็นอันดับสองในเวลา ต้องกำหนดทั้งรูปร่างเริ่มต้น u₀ และความเร็วเริ่มต้น v₀ — กำหนดในขั้นตอนเงื่อนไขเริ่มต้น/ขอบเขต', {open:false});
+      const note = document.createElement('div'); note.className='eq-note';
+      note.textContent = 'ระบบจะแปลงสมการนี้เป็นระบบ [M]{ü}+γ[M]{u̇}+[K]{u}={0} ด้วยไฟไนต์เอลิเมนต์ แล้วเดินเวลาด้วยวิธี Newmark-β (average acceleration, เสถียรไม่มีเงื่อนไข) — ใช้หน่วย SI ทั้งหมด (m, s, m/s)';
+      body2.appendChild(note);
+    } else if(isStruct){
       const body = eqBlock(main, 'Governing equation (static equilibrium, linear elasticity)',
         STRUCT_EQ_EQUILIBRIUM,
         `เมื่อ <b>σ</b> คือเทนเซอร์ความเค้น (stress) และ <b>b</b> คือแรงต่อหน่วยปริมาตร (body force, เช่น น้ำหนักตัวเอง — ในเวอร์ชันนี้ตั้งเป็น 0)<br>

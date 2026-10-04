@@ -57,7 +57,9 @@ import { renderAll, renderMain } from '../layout.js';
         const note = document.createElement('div'); note.className='eq-note';
                                   note.textContent = state.equation==='structure'
                                     ? 'พื้นที่หน้าตัด A กำหนดในขั้นตอนคุณสมบัติวัสดุ (ขั้นตอนถัดไป)'
-                                    : 'สมมติพื้นที่หน้าตัด A = 1 m² เพื่อความง่าย (ไม่ส่งผลต่อรูปแบบคำตอบของอุณหภูมิ)';
+                                    : (state.equation==='wave'
+                                      ? 'แบบจำลองสาย/แท่งหนึ่งมิติ — พื้นที่หน้าตัดไม่มีผลต่อสมการคลื่น (ความเร็วคลื่น c กำหนดในขั้นตอนถัดไป)'
+                                      : 'สมมติพื้นที่หน้าตัด A = 1 m² เพื่อความง่าย (ไม่ส่งผลต่อรูปแบบคำตอบของอุณหภูมิ)');
         main.appendChild(note);
 
          const wrap = document.createElement('div'); wrap.className='canvas-wrap';
@@ -175,7 +177,7 @@ import { renderAll, renderMain } from '../layout.js';
              p.vertices.forEach(v=>{ if(v.x<minX) minX=v.x; if(v.y<minY) minY=v.y; });
              p.vertices = p.vertices.map(v=>({x:v.x-minX, y:v.y-minY}));
              p.finalized = true;
-             state.mesh=null; state.results=null; state.bc={}; state.sbc={}; state.spl={};
+             state.mesh=null; state.results=null; state.bc={}; state.sbc={}; state.spl={}; state.wbc={};
              renderAll();
           };
           actions.appendChild(undoBtn); actions.appendChild(clearBtn); actions.appendChild(closeBtn);
@@ -204,7 +206,7 @@ import { renderAll, renderMain } from '../layout.js';
           drawPreviewShape(cv);
 
           const redrawBtn = document.createElement('button'); redrawBtn.className='secondary'; redrawBtn.style.marginTop='12px'; redrawBtn.textContent='✎ วาดรูปร่างใหม่';
-          redrawBtn.onclick = ()=>{ state.polygon={vertices:[], finalized:false}; state.mesh=null; state.results=null; state.bc={}; state.sbc={}; state.spl={}; renderAll(); };
+          redrawBtn.onclick = ()=>{ state.polygon={vertices:[], finalized:false}; state.mesh=null; state.results=null; state.bc={}; state.sbc={}; state.spl={}; state.wbc={}; renderAll(); };
           main.appendChild(redrawBtn);
 
           navButtons(main, { back:true, next:true, onNext:()=>{ state.step=2; renderAll(); } });

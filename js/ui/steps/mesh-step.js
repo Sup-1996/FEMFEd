@@ -18,6 +18,7 @@ import { renderAll } from '../layout.js';
 
   export function renderMeshStep(main){
     const isStruct = state.equation==='structure';
+    const isWave = state.equation==='wave';
     const cap = maxElementsCap();
     const meshDesc = state.dimension==='1d'
       ? 'กำหนดระดับของเอลิเมนต์และความละเอียดของเมช ระบบจะแบ่งเส้นออกเป็นเอลิเมนต์แท่ง (bar    element) โดยอัตโนมัติ'
@@ -65,7 +66,23 @@ import { renderAll } from '../layout.js';
 
   // --- Shape function interpolation (depends on order & dimension) — the
   // core concept for this step, so it stays open by default. ---
-  if(isStruct){
+  if(isWave){
+    // Wave: the unknown is the scalar field u(x[,y],t), interpolated like the heat module's temperature
+    if(state.dimension==='1d'){
+      const n = state.elementOrder==='linear' ? 2 : 3;
+      const terms = Array.from({length:n},(_,i)=>`N<sub>${i+1}</sub>u<sub>${i+1}</sub>`).join(` ${rm('+')} `);
+      eqBlock(main, 'การประมาณค่า u ภายในแต่ละเอลิเมนต์', `u${rm('(')}x,t${rm(')')} ${rm('≈')} ${terms}`,
+        n===2 ? 'เอลิเมนต์แท่ง 2 โหนด ประมาณรูปคลื่นแบบเชิงเส้นระหว่างสองปลาย — ค่าที่โหนดเป็นฟังก์ชันของเวลา' : 'เอลิเมนต์แท่ง 3 โหนด (2 ปลาย + 1 กลาง) ประมาณรูปคลื่นแบบพาราโบลา ให้ความแม่นยำสูงกว่าโดยใช้จำนวนเอลิเมนต์เท่ากัน — ลดการเพี้ยนของความเร็วคลื่น (numerical dispersion)');
+    } else if(state.elementOrder==='linear'){
+      eqBlock(main, 'การประมาณค่า u ภายในแต่ละเอลิเมนต์ (shape function interpolation)',
+        `u${rm('(')}x,y,t${rm(')')} ${rm('≈')} N<sub>1</sub>u<sub>1</sub> ${rm('+')} N<sub>2</sub>u<sub>2</sub> ${rm('+')} N<sub>3</sub>u<sub>3</sub>`,
+        'เอลิเมนต์สามเหลี่ยม 3 โหนด ประมาณรูปคลื่นแบบเชิงเส้นภายในเอลิเมนต์ — ค่าที่โหนด uᵢ(t) เปลี่ยนตามเวลา ส่วน Nᵢ(x,y) ขึ้นกับตำแหน่งเท่านั้น');
+    } else {
+      eqBlock(main, 'การประมาณค่า u ภายในแต่ละเอลิเมนต์ (shape function interpolation)',
+        `u${rm('(')}x,y,t${rm(')')} ${rm('≈')} ${rm('Σ')}<sub>i=1</sub><sup>6</sup> N<sub>i</sub>u<sub>i</sub>`,
+        'เอลิเมนต์สามเหลี่ยม 6 โหนด (3 มุม + 3 กลางขอบ) ประมาณรูปคลื่นแบบพาราโบลาภายในเอลิเมนต์ ให้ความแม่นยำสูงกว่า linear โดยใช้จำนวนเอลิเมนต์เท่ากัน และเก็บรูปคลื่นได้ดีกว่าเมื่อความยาวคลื่นสั้น');
+    }
+  } else if(isStruct){
     // Structural: the unknown is the displacement field, not temperature
     if(state.dimension==='1d'){
       const n = state.elementOrder==='linear' ? 2 : 3;
@@ -118,8 +135,10 @@ import { renderAll } from '../layout.js';
 
     // --- Brief discretized elemental equation --- (a summary aside, starts collapsed)
     eqBlock(main, 'สมการเอลิเมนต์ที่ได้จากการ discretize (โดยสังเขป)',
-       isStruct ? `${rm('[')}k<sub>e</sub>${rm(']{')}u<sub>e</sub>${rm('} = {')}F<sub>e</sub>${rm('}')}` : `${rm('[')}k<sub>e</sub>${rm(']{')}T<sub>e</sub>${rm('} = {')}F<sub>e</sub>${rm('}')}`,
-  isStruct ? (state.dimension==='1d'
+       isWave ? `${rm('[')}m<sub>e</sub>${rm(']{')}ü<sub>e</sub>${rm('} + [')}k<sub>e</sub>${rm(']{')}u<sub>e</sub>${rm('} = {0}')}`
+         : (isStruct ? `${rm('[')}k<sub>e</sub>${rm(']{')}u<sub>e</sub>${rm('} = {')}F<sub>e</sub>${rm('}')}` : `${rm('[')}k<sub>e</sub>${rm(']{')}T<sub>e</sub>${rm('} = {')}F<sub>e</sub>${rm('}')}`),
+  isWave ? 'เมทริกซ์มวล [m<sub>e</sub>] คำนวณจาก ∫NᵢNⱼ และเมทริกซ์ [k<sub>e</sub>] จาก c²∫(∇Nᵢ·∇Nⱼ) ของแต่ละเอลิเมนต์ แล้วนำไปประกอบรวม (assemble) เป็นระบบสมการรวมทั้งโมเดล ก่อนเดินเวลาด้วย Newmark-β ในขั้นตอนถัดไป — เลือก consistent หรือ lumped mass ได้ในขั้นตอนนั้น'
+  : isStruct ? (state.dimension==='1d'
      ? `เมทริกซ์ [k<sub>e</sub>] คำนวณจากอินทิกรัลของ EA·(dN<sub>i</sub>/dx)(dN<sub>j</sub>/dx) (linear: EA/L · [[1, −1], [−1, 1]]) แล้วนำไปประกอบรวม (assemble) เป็นระบบสมการรวมของทั้งแท่งในขั้นตอนถัดไป`
      : `เมทริกซ์ [k<sub>e</sub>] = ∫ [B]<sup>T</sup>[D][B] t dA โดย [B] คือเมทริกซ์ที่เปลี่ยนการเคลื่อนที่ที่โหนดเป็นความเครียด ส่วน {F<sub>e</sub>} มาจากแรงที่ขอบและแรงจุด แล้วนำไปประกอบรวม (assemble) เป็นระบบสมการรวมทั้งโมเดลในขั้นตอนถัดไป`)
    : `เมทริกซ์ [k<sub>e</sub>] และเวกเตอร์ {F<sub>e</sub>} ของแต่ละเอลิเมนต์คำนวณจากอินทิกรัลของ k(∇N<sub>i</sub>·∇N<sub>j</sub>) และ Q·N<sub>i</sub> ตามลำดับ แล้วนำไปประกอบรวม (assemble) เป็นระบบสมการรวมทั้งโมเดลในขั้นตอนถัดไป`,
@@ -131,7 +150,7 @@ import { renderAll } from '../layout.js';
    // field, it doesn't generate the mesh by itself. ---
    const presets = state.dimension==='1d'
      ? [['หยาบ',20],['กลาง',100],['ละเอียด',500]]
-     : (isStruct ? [['หยาบ',60],['กลาง',400],['ละเอียด',1200]] : [['หยาบ',60],['กลาง',500],['ละเอียด',2000]]);
+     : (isWave ? [['หยาบ',60],['กลาง',400],['ละเอียด',1500]] : (isStruct ? [['หยาบ',60],['กลาง',400],['ละเอียด',1200]] : [['หยาบ',60],['กลาง',500],['ละเอียด',2000]]));
    if(state.maxElements>cap) state.maxElements = cap;
    const presetRow = document.createElement('div'); presetRow.className='shape-choice'; presetRow.style.marginBottom='6px';
    const presetBtns = [];
