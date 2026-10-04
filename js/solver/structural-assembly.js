@@ -87,7 +87,7 @@ import { cornerNodeIds } from '../mesh/structural-info.js';
     }
   }
 
-  function buildCSR(n, I, J, V){
+  export function buildCSR(n, I, J, V){
     const m = I.length;
     const start = new Int32Array(n+1);
     for(let k=0;k<m;k++) start[I[k]+1]++;
